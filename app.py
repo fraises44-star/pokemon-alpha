@@ -278,17 +278,60 @@ def get_card_pool():
 # LOAD CARD POOL
 # ---------------------------------------------------------
 
-pool_result = get_card_pool()
+@st.cache_data(ttl=3600)
+def get_card_pool():
 
-if not pool_result["success"]:
+    params = {
+        "pageSize": 100
+    }
 
-    st.error(
-        f"API error: {pool_result['status']} — {pool_result['error']}"
-    )
+    for attempt in range(3):
 
-    st.stop()
+        try:
 
-cards = pool_result["cards"]
+            response = requests.get(
+                API_URL,
+                headers=HEADERS,
+                params=params,
+                timeout=60
+            )
+
+            if response.status_code == 200:
+
+                return {
+                    "success": True,
+                    "status": 200,
+                    "error": None,
+                    "cards": response.json().get("data", [])
+                }
+
+            return {
+                "success": False,
+                "status": response.status_code,
+                "error": response.text[:500],
+                "cards": []
+            }
+
+        except requests.exceptions.Timeout:
+
+            if attempt < 2:
+                continue
+
+            return {
+                "success": False,
+                "status": None,
+                "error": "Pokémon TCG API timed out after 3 attempts.",
+                "cards": []
+            }
+
+        except requests.RequestException as e:
+
+            return {
+                "success": False,
+                "status": None,
+                "error": str(e),
+                "cards": []
+            }
 
 
 # ---------------------------------------------------------
@@ -507,7 +550,7 @@ if search:
             API_URL,
             headers=HEADERS,
             params=params,
-            timeout=30
+            timeout=60
         )
 
         if response.status_code != 200:
