@@ -555,6 +555,16 @@ if tier_results:
 # SEARCH
 # ---------------------------------------------------------
 
+st.divider()
+
+st.markdown("## 🔎 Search Any Pokémon Card")
+
+search = st.text_input(
+    "Search by Pokémon name",
+    value="Gengar"
+)
+
+if search:
 if search:
 
     params = {
