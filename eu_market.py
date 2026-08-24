@@ -47,7 +47,11 @@ def normalize(full):
         "name": full.get("name"),
         "set_name": set_info.get("name") or set_info.get("id") or "",
         "rarity": full.get("rarity") or "",
-        "image_url": full.get("image"),
+        "image_url": (
+    f"{full.get('image')}/high.webp"
+    if full.get("image")
+    else None
+),
         "prices": prices,
     }
 
