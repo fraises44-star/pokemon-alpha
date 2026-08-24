@@ -565,7 +565,6 @@ search = st.text_input(
 )
 
 if search:
-if search:
 
     params = {
         "q": f"name:{search}*",
@@ -573,6 +572,8 @@ if search:
     }
 
     response = None
+
+    for attempt in range(3):
 
     for attempt in range(3):
 
