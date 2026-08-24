@@ -555,62 +555,71 @@ if tier_results:
 # SEARCH
 # ---------------------------------------------------------
 
-st.divider()
-
-st.markdown("## 🔎 Search Any Pokémon Card")
-
-search = st.text_input(
-    "Search by Pokémon name",
-    value="Gengar"
-)
-
-
 if search:
 
     params = {
-        "q": f'name:"{search}*"',
-        "pageSize": 100
+        "q": f"name:{search}*",
+        "pageSize": 50
     }
 
-    try:
+    response = None
 
-        response = requests.get(
-            API_URL,
-            headers=HEADERS,
-            params=params,
-            timeout=60
-        )
+    for attempt in range(3):
+
+        try:
+
+            response = requests.get(
+                API_URL,
+                headers=HEADERS,
+                params=params,
+                timeout=60
+            )
+
+            if response.status_code == 200:
+                break
+
+            # Retry temporary Pokémon API server errors
+            if response.status_code in [500, 502, 503, 504]:
+                continue
+
+            break
+
+        except requests.exceptions.Timeout:
+
+            if attempt == 2:
+                st.error("Search timed out after 3 attempts.")
+
+        except requests.RequestException as e:
+
+            st.error(f"Could not connect to Pokémon API: {e}")
+            response = None
+            break
+
+
+    if response is not None:
 
         if response.status_code != 200:
 
             st.error(
-                f"Search API error: "
-                f"{response.status_code} — "
-                f"{response.text[:500]}"
+                f"Search API error: {response.status_code}. "
+                "The Pokémon TCG API is currently having trouble processing the request."
             )
 
         else:
 
-            search_cards = response.json().get(
-                "data",
-                []
-            )
+            search_cards = response.json().get("data", [])
 
             results = []
 
             for card in search_cards:
 
-                prices = card.get(
-                    "cardmarket",
-                    {}
-                ).get(
-                    "prices",
-                    {}
+                prices = (
+                    card
+                    .get("cardmarket", {})
+                    .get("prices", {})
                 )
 
-                trend_price = prices.get(
-                    "trendPrice"
-                )
+                trend_price = prices.get("trendPrice")
 
                 if trend_price is None:
                     continue
@@ -649,13 +658,9 @@ if search:
 
                 top = df.iloc[0]
 
-                st.markdown(
-                    "### 🥇 Best Search Result"
-                )
+                st.markdown("### 🥇 Best Search Result")
 
-                image_col, info_col = st.columns(
-                    [1, 3]
-                )
+                image_col, info_col = st.columns([1, 3])
 
                 with image_col:
 
@@ -710,27 +715,13 @@ if search:
                             f"€{top['Average Sell €']:.2f}"
                         )
 
-                st.markdown(
-                    "### 📊 All Matching Cards"
-                )
+                st.markdown("### 📊 All Matching Cards")
 
                 st.dataframe(
                     df.drop(columns=["Image"]),
                     use_container_width=True,
                     hide_index=True
                 )
-
-    except requests.exceptions.Timeout:
-
-        st.error(
-            "Search timed out. Please try again."
-        )
-
-    except requests.RequestException as e:
-
-        st.error(
-            f"Could not connect to the Pokémon API: {e}"
-        )
 
 
 # ---------------------------------------------------------
