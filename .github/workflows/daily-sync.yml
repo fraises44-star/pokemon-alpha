@@ -1,0 +1,29 @@
+name: Pokemon Alpha Daily EU Sync
+
+on:
+  schedule:
+    - cron: "15 4 * * *"
+
+  workflow_dispatch:
+
+jobs:
+  daily-sync:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Get Pokemon Alpha code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install requirements
+        run: pip install -r requirements.txt
+
+      - name: Run EU market sync
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: python daily_sync.py
