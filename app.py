@@ -107,7 +107,10 @@ That will:
                 with col:
                     st.markdown(f"#### €{lo}–€{hi}")
                     if row.get("image_url"):
-                        st.image(row["image_url"],use_container_width=True)
+                        st.markdown(
+    f'<img src="{row["image_url"]}" style="width:100%;border-radius:14px;">',
+    unsafe_allow_html=True
+)
                     st.markdown(f"**{row['name']}**")
                     st.caption(row.get("set_name",""))
                     st.metric("PII",f"{int(row['PII'])}/100")
@@ -179,7 +182,10 @@ elif page == "Card Analyzer":
             left,right=st.columns([1,2.5])
             with left:
                 if row.get("image_url"):
-                    st.image(row["image_url"],use_container_width=True)
+                    st.markdown(
+    f'<img src="{row["image_url"]}" style="width:100%;border-radius:14px;">',
+    unsafe_allow_html=True
+)
             with right:
                 st.markdown(f"# {row['name']}")
                 st.caption(f"{row.get('set_name','')} • {row.get('rarity','')}")
