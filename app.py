@@ -575,8 +575,6 @@ if search:
 
     for attempt in range(3):
 
-    for attempt in range(3):
-
         try:
 
             response = requests.get(
