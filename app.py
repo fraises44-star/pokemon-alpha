@@ -1,744 +1,297 @@
 import streamlit as st
-import requests
 import pandas as pd
+from datetime import datetime
 
-# ---------------------------------------------------------
-# PAGE SETUP
-# ---------------------------------------------------------
+from data_provider import (
+    search_cards,
+    get_market_universe,
+    demo_universe,
+    get_cardmarket_snapshot,
+)
+from scoring import score_card, recommendation_label, build_thesis, price_band
+from storage import init_store, add_watchlist, get_watchlist, remove_watchlist, add_portfolio, get_portfolio
+from ui import inject_css, render_score_gauge, render_metric_card
 
 st.set_page_config(
-    page_title="Pokemon Alpha",
+    page_title="Pokémon Alpha",
     page_icon="📈",
-    layout="wide"
+    layout="wide",
+    initial_sidebar_state="expanded",
 )
 
-st.title("📈 Pokemon Alpha")
-st.subheader("Should I buy this Pokémon card today?")
-st.caption("Early MVP — rankings are based on a simple PII scoring model.")
+inject_css()
+init_store()
 
-
-# ---------------------------------------------------------
-# API SETUP
-# ---------------------------------------------------------
-
-API_URL = "https://api.pokemontcg.io/v2/cards"
-
-try:
-    API_KEY = st.secrets["POKEMONTCG_API_KEY"]
-except Exception:
-    API_KEY = None
-
-HEADERS = {}
-
-if API_KEY:
-    HEADERS["X-Api-Key"] = API_KEY
-
-
-# ---------------------------------------------------------
-# POPULARITY MODEL
-# ---------------------------------------------------------
-
-popular_pokemon = {
-    "Charizard": 100,
-    "Pikachu": 98,
-    "Gengar": 96,
-    "Umbreon": 95,
-    "Rayquaza": 94,
-    "Lugia": 93,
-    "Mew": 92,
-    "Mewtwo": 91,
-    "Giratina": 91,
-    "Eevee": 90,
-    "Sylveon": 90,
-    "Arceus": 90,
-    "Espeon": 89,
-    "Greninja": 89,
-    "Latias": 88,
-    "Dragonite": 88,
-    "Vaporeon": 88,
-    "Latios": 87,
-    "Leafeon": 87,
-    "Glaceon": 87,
-    "Jolteon": 87,
-    "Flareon": 87,
-    "Blastoise": 87,
-    "Venusaur": 85,
-    "Lucario": 84,
-    "Snorlax": 84,
-    "Mimikyu": 83,
-    "Magikarp": 83,
-    "Gardevoir": 82,
-}
-
-
-# ---------------------------------------------------------
-# PII SCORING MODEL
-# ---------------------------------------------------------
-
-def score_card(card):
-
-    name = card.get("name", "")
-    rarity = card.get("rarity", "") or ""
-
-    prices = card.get("cardmarket", {}).get("prices", {})
-
-    trend_price = prices.get("trendPrice") or 0
-    low_price = prices.get("lowPrice") or 0
-    average_sell = prices.get("averageSellPrice") or 0
-
-    # POPULARITY
-    popularity_score = 50
-
-    for pokemon, score in popular_pokemon.items():
-        if pokemon.lower() in name.lower():
-            popularity_score = score
-            break
-
-    # RARITY
-    rarity_score = 45
-    rarity_lower = rarity.lower()
-
-    if "special illustration" in rarity_lower:
-        rarity_score = 100
-    elif "illustration rare" in rarity_lower:
-        rarity_score = 92
-    elif "hyper rare" in rarity_lower:
-        rarity_score = 95
-    elif "rare ultra" in rarity_lower:
-        rarity_score = 90
-    elif "secret" in rarity_lower:
-        rarity_score = 88
-    elif "rare holo" in rarity_lower:
-        rarity_score = 72
-    elif "rare" in rarity_lower:
-        rarity_score = 60
-
-    # PRICE STRENGTH
-    if trend_price >= 150:
-        price_score = 95
-    elif trend_price >= 75:
-        price_score = 88
-    elif trend_price >= 30:
-        price_score = 80
-    elif trend_price >= 15:
-        price_score = 72
-    elif trend_price >= 5:
-        price_score = 65
-    elif trend_price > 0:
-        price_score = 55
-    else:
-        price_score = 30
-
-    # VALUE SCORE
-    value_score = 50
-
-    if low_price and trend_price:
-
-        discount = (
-            (trend_price - low_price)
-            / trend_price
-        ) * 100
-
-        if discount >= 30:
-            value_score = 100
-        elif discount >= 20:
-            value_score = 90
-        elif discount >= 15:
-            value_score = 82
-        elif discount >= 10:
-            value_score = 75
-        elif discount >= 5:
-            value_score = 65
-        else:
-            value_score = 50
-
-    # MARKET STRENGTH
-    market_strength = 50
-
-    if average_sell and trend_price:
-
-        difference = abs(
-            average_sell - trend_price
-        ) / trend_price
-
-        if difference <= 0.05:
-            market_strength = 90
-        elif difference <= 0.10:
-            market_strength = 80
-        elif difference <= 0.20:
-            market_strength = 65
-        else:
-            market_strength = 45
-
-    # FINAL PII
-    investment_score = round(
-        popularity_score * 0.30
-        + rarity_score * 0.25
-        + price_score * 0.15
-        + value_score * 0.20
-        + market_strength * 0.10
+# ---------------- Sidebar ----------------
+with st.sidebar:
+    st.markdown("# 📈 Pokémon Alpha")
+    st.caption("Investment intelligence for Pokémon cards")
+    page = st.radio(
+        "Navigate",
+        ["Dashboard", "Screener", "Card Analyzer", "Portfolio", "Watchlist", "Methodology"],
+        label_visibility="collapsed",
     )
+    st.divider()
+    st.caption("Prototype data sources")
+    st.markdown("**Raw market:** Cardmarket / TCGdex")
+    st.markdown("**US market:** TCGplayer / TCGdex")
+    st.markdown("**Graded:** connector-ready")
+    st.markdown("**Population:** connector-ready")
+    st.divider()
+    st.caption("PII scores are experimental research signals, not financial advice.")
 
-    investment_score = min(
-        max(investment_score, 0),
-        100
-    )
+# ---------------- Helpers ----------------
+@st.cache_data(ttl=3600, show_spinner=False)
+def load_universe():
+    live = get_market_universe(limit=500)
+    if live:
+        return live, "Live"
+    return demo_universe(), "Demo fallback"
 
-    return {
-        "PII": investment_score,
-        "Popularity": popularity_score,
-        "RarityScore": rarity_score,
-        "PriceScore": price_score,
-        "ValueScore": value_score,
-        "MarketStrength": market_strength
-    }
-
-
-# ---------------------------------------------------------
-# RECOMMENDATION
-# ---------------------------------------------------------
-
-def recommendation(score):
-
-    if score >= 90:
-        return "🔥 Strong Buy Candidate"
-    elif score >= 82:
-        return "🟢 Strong Watch"
-    elif score >= 74:
-        return "👀 Interesting"
-    elif score >= 65:
-        return "🟡 Speculative"
-    else:
-        return "⚠️ Weak Signal"
-
-
-# ---------------------------------------------------------
-# PRICE TIERS
-# ---------------------------------------------------------
-
-price_tiers = [
-    (0, 5),
-    (5, 10),
-    (10, 15),
-    (15, 20),
-    (20, 30),
-    (30, 50),
-    (50, 75),
-    (75, 100),
-    (100, 150),
-    (150, 250),
-]
-
-
-# ---------------------------------------------------------
-# DOWNLOAD CARD POOL
-# ---------------------------------------------------------
-
-@st.cache_data(ttl=3600)
-def get_card_pool():
-
-    params = {
-        "pageSize": 100
-    }
-
-    for attempt in range(3):
-
-        try:
-
-            response = requests.get(
-                API_URL,
-                headers=HEADERS,
-                params=params,
-                timeout=60
-            )
-
-            if response.status_code == 200:
-
-                return {
-                    "success": True,
-                    "status": 200,
-                    "error": None,
-                    "cards": response.json().get("data", [])
-                }
-
-            return {
-                "success": False,
-                "status": response.status_code,
-                "error": response.text[:500],
-                "cards": []
-            }
-
-        except requests.exceptions.Timeout:
-
-            if attempt < 2:
-                continue
-
-            return {
-                "success": False,
-                "status": None,
-                "error": "Pokémon TCG API timed out after 3 attempts.",
-                "cards": []
-            }
-
-        except requests.RequestException as e:
-
-            return {
-                "success": False,
-                "status": None,
-                "error": str(e),
-                "cards": []
-            }
-
-
-# ---------------------------------------------------------
-# LOAD DATA
-# ---------------------------------------------------------
-
-with st.spinner("Loading Pokémon market data..."):
-
-    pool_result = get_card_pool()
-
-
-if not pool_result["success"]:
-
-    st.error(
-        f"API error: {pool_result['status']} — {pool_result['error']}"
-    )
-
-    st.stop()
-
-
-# THIS IS THE LINE THAT WAS MISSING
-cards = pool_result["cards"]
-
-
-# ---------------------------------------------------------
-# PRICE TIER DASHBOARD
-# ---------------------------------------------------------
-
-st.divider()
-
-st.markdown("## 🏆 Best Investment Candidate by Price Tier")
-
-st.caption(
-    "Each bracket is separate, so the same cheap card cannot win every tier."
-)
-
-tier_results = []
-
-
-for min_price, max_price in price_tiers:
-
-    candidates = []
-
+def dataframe_from_cards(cards):
+    rows = []
     for card in cards:
-
-        prices = card.get(
-            "cardmarket",
-            {}
-        ).get(
-            "prices",
-            {}
-        )
-
-        trend_price = prices.get("trendPrice")
-        low_price = prices.get("lowPrice")
-        average_sell = prices.get("averageSellPrice")
-
-        if trend_price is None:
-            continue
-
-        if min_price == 0:
-            inside_range = 0 < trend_price < max_price
-        else:
-            inside_range = min_price <= trend_price < max_price
-
-        if not inside_range:
-            continue
-
-        scores = score_card(card)
-
-        candidates.append({
+        score = score_card(card)
+        cm = get_cardmarket_snapshot(card)
+        rows.append({
+            "ID": card.get("id"),
             "Card": card.get("name"),
-            "Set": card.get("set", {}).get("name"),
-            "Rarity": card.get("rarity"),
-            "Price": trend_price,
-            "Low": low_price,
-            "Average": average_sell,
-            "PII": scores["PII"],
-            "Popularity": scores["Popularity"],
-            "Rarity Score": scores["RarityScore"],
-            "Value Score": scores["ValueScore"],
-            "Market Strength": scores["MarketStrength"],
-            "Image": card.get("images", {}).get("small"),
-            "Min Price": min_price,
-            "Max Price": max_price
+            "Set": (card.get("set") or {}).get("name", ""),
+            "Rarity": card.get("rarity", ""),
+            "Price €": cm.get("trend"),
+            "Avg 1d €": cm.get("avg1"),
+            "Avg 7d €": cm.get("avg7"),
+            "Avg 30d €": cm.get("avg30"),
+            "30d Momentum %": score["momentum_30d"],
+            "PII": score["pii"],
+            "Signal": recommendation_label(score["pii"]),
+            "Confidence": score["confidence"],
+            "Popularity": score["popularity"],
+            "Value": score["value"],
+            "Rarity Score": score["rarity"],
+            "Liquidity Proxy": score["liquidity"],
+            "Image": card.get("image") or (card.get("images") or {}).get("small"),
+            "_card": card,
         })
+    return pd.DataFrame(rows)
 
-    if candidates:
+cards, source_mode = load_universe()
+df = dataframe_from_cards(cards)
 
-        candidate_df = pd.DataFrame(candidates)
+# ---------------- Dashboard ----------------
+if page == "Dashboard":
+    st.title("Pokémon Alpha")
+    st.markdown("### Find the cards with the strongest **risk-adjusted investment signals**.")
 
-        candidate_df = candidate_df.sort_values(
-            [
-                "PII",
-                "Popularity",
-                "Value Score"
-            ],
-            ascending=[
-                False,
-                False,
-                False
-            ]
-        )
+    c1, c2, c3, c4 = st.columns(4)
+    with c1:
+        render_metric_card("Cards evaluated", f"{len(df):,}", source_mode)
+    with c2:
+        strong = int((df["PII"] >= 82).sum()) if not df.empty else 0
+        render_metric_card("Strong signals", strong, "PII ≥ 82")
+    with c3:
+        median = int(df["PII"].median()) if not df.empty else 0
+        render_metric_card("Median PII", median, "Current universe")
+    with c4:
+        updated = datetime.now().strftime("%H:%M")
+        render_metric_card("Last refresh", updated, "Cache: 60 min")
 
-        best_card = candidate_df.iloc[0]
+    st.markdown("## 🏆 Best candidate by price band")
+    bands = [(0,5),(5,10),(10,15),(15,20),(20,30),(30,50),(50,75),(75,100),(100,150),(150,250)]
+    winners = []
+    for lo, hi in bands:
+        band_df = df[(df["Price €"].notna()) & (df["Price €"] >= lo) & (df["Price €"] < hi)].copy()
+        if not band_df.empty:
+            winners.append((lo, hi, band_df.sort_values(["PII","Confidence"], ascending=False).iloc[0]))
 
-        tier_results.append(best_card)
+    for start in (0,5):
+        cols = st.columns(5)
+        for col, item in zip(cols, winners[start:start+5]):
+            lo, hi, row = item
+            with col:
+                st.markdown(f"#### €{lo}–€{hi}")
+                if row["Image"]:
+                    st.image(row["Image"], use_container_width=True)
+                st.markdown(f"**{row['Card']}**")
+                st.caption(row["Set"])
+                st.metric("PII", f"{int(row['PII'])}/100")
+                if pd.notna(row["Price €"]):
+                    st.markdown(f"**€{row['Price €']:.2f}**")
+                st.caption(recommendation_label(row["PII"]))
 
-
-# ---------------------------------------------------------
-# SHOW FIRST 5 TIERS
-# ---------------------------------------------------------
-
-if tier_results:
-
-    first_row = st.columns(5)
-
-    for column, card in zip(
-        first_row,
-        tier_results[:5]
-    ):
-
-        with column:
-
-            st.markdown(
-                f"### €{int(card['Min Price'])}–€{int(card['Max Price'])}"
-            )
-
-            if card["Image"]:
-                st.image(
-                    card["Image"],
-                    use_container_width=True
-                )
-
-            st.markdown(
-                f"**{card['Card']}**"
-            )
-
-            st.caption(
-                card["Set"]
-            )
-
-            st.metric(
-                "PII Score",
-                f"{int(card['PII'])}/100"
-            )
-
-            st.write(
-                recommendation(card["PII"])
-            )
-
-            st.write(
-                f"Market: **€{card['Price']:.2f}**"
-            )
-
-            if pd.notna(card["Low"]):
-
-                st.write(
-                    f"Low: €{card['Low']:.2f}"
-                )
-
-
-    st.divider()
-
-
-    # -----------------------------------------------------
-    # SHOW NEXT 5 TIERS
-    # -----------------------------------------------------
-
-    second_row = st.columns(5)
-
-    for column, card in zip(
-        second_row,
-        tier_results[5:]
-    ):
-
-        with column:
-
-            st.markdown(
-                f"### €{int(card['Min Price'])}–€{int(card['Max Price'])}"
-            )
-
-            if card["Image"]:
-                st.image(
-                    card["Image"],
-                    use_container_width=True
-                )
-
-            st.markdown(
-                f"**{card['Card']}**"
-            )
-
-            st.caption(
-                card["Set"]
-            )
-
-            st.metric(
-                "PII Score",
-                f"{int(card['PII'])}/100"
-            )
-
-            st.write(
-                recommendation(card["PII"])
-            )
-
-            st.write(
-                f"Market: **€{card['Price']:.2f}**"
-            )
-
-            if pd.notna(card["Low"]):
-
-                st.write(
-                    f"Low: €{card['Low']:.2f}"
-                )
-
-
-else:
-
-    st.warning(
-        "No cards in the current API pool matched the price tiers."
-    )
-
-
-# ---------------------------------------------------------
-# TIER TABLE
-# ---------------------------------------------------------
-
-if tier_results:
-
-    st.divider()
-
-    st.markdown("## 📊 Today's Tier Rankings")
-
-    tier_table = pd.DataFrame(tier_results)
-
-    tier_table["Price Tier"] = (
-        "€"
-        + tier_table["Min Price"].astype(int).astype(str)
-        + "–€"
-        + tier_table["Max Price"].astype(int).astype(str)
-    )
-
-    display_columns = [
-        "Price Tier",
-        "Card",
-        "Set",
-        "Rarity",
-        "Price",
-        "Low",
-        "PII",
-        "Popularity",
-        "Rarity Score",
-        "Value Score",
-        "Market Strength"
-    ]
-
+    st.markdown("## 🚀 Opportunity leaderboard")
+    leaderboard = df[df["Price €"].notna()].sort_values(["PII","30d Momentum %","Confidence"], ascending=False).head(15)
     st.dataframe(
-        tier_table[display_columns],
-        use_container_width=True,
-        hide_index=True
+        leaderboard[["Card","Set","Price €","PII","Signal","30d Momentum %","Confidence"]],
+        use_container_width=True, hide_index=True
     )
 
+    st.markdown("## 📉 Potential value entries")
+    value = df[df["Price €"].notna()].sort_values(["Value","PII"], ascending=False).head(10)
+    st.dataframe(
+        value[["Card","Set","Price €","Value","PII","30d Momentum %"]],
+        use_container_width=True, hide_index=True
+    )
 
-# ---------------------------------------------------------
-# SEARCH
-# ---------------------------------------------------------
+# ---------------- Screener ----------------
+elif page == "Screener":
+    st.title("Investment Screener")
+    st.caption("Filter the market rather than browsing one Pokémon at a time.")
 
-st.divider()
+    fc1, fc2, fc3, fc4 = st.columns(4)
+    min_price = fc1.number_input("Min €", min_value=0.0, value=0.0, step=5.0)
+    max_price = fc2.number_input("Max €", min_value=1.0, value=250.0, step=10.0)
+    min_pii = fc3.slider("Minimum PII", 0, 100, 60)
+    min_momentum = fc4.slider("Min 30d momentum %", -50, 100, -10)
 
-st.markdown("## 🔎 Search Any Pokémon Card")
+    filtered = df[
+        (df["Price €"].notna()) &
+        (df["Price €"] >= min_price) &
+        (df["Price €"] <= max_price) &
+        (df["PII"] >= min_pii) &
+        (df["30d Momentum %"] >= min_momentum)
+    ].copy()
 
-search = st.text_input(
-    "Search by Pokémon name",
-    value="Gengar"
-)
+    sort_by = st.selectbox("Sort by", ["PII", "30d Momentum %", "Value", "Confidence", "Price €"])
+    ascending = sort_by == "Price €"
+    filtered = filtered.sort_values(sort_by, ascending=ascending)
 
-if search:
+    st.metric("Matches", len(filtered))
+    st.dataframe(
+        filtered[["Card","Set","Rarity","Price €","Avg 7d €","Avg 30d €","30d Momentum %","PII","Signal","Confidence"]],
+        use_container_width=True, hide_index=True
+    )
 
-    params = {
-        "q": f"name:{search}*",
-        "pageSize": 50
-    }
+# ---------------- Analyzer ----------------
+elif page == "Card Analyzer":
+    st.title("Card Analyzer")
+    query = st.text_input("Search card or Pokémon", placeholder="e.g. Gengar, Umbreon, Charizard")
 
-    response = None
+    if query:
+        with st.spinner("Searching market data..."):
+            results = search_cards(query, limit=50)
 
-    for attempt in range(3):
-
-        try:
-
-            response = requests.get(
-                API_URL,
-                headers=HEADERS,
-                params=params,
-                timeout=60
-            )
-
-            if response.status_code == 200:
-                break
-
-            # Retry temporary Pokémon API server errors
-            if response.status_code in [500, 502, 503, 504]:
-                continue
-
-            break
-
-        except requests.exceptions.Timeout:
-
-            if attempt == 2:
-                st.error("Search timed out after 3 attempts.")
-
-        except requests.RequestException as e:
-
-            st.error(f"Could not connect to Pokémon API: {e}")
-            response = None
-            break
-
-
-    if response is not None:
-
-        if response.status_code != 200:
-
-            st.error(
-                f"Search API error: {response.status_code}. "
-                "The Pokémon TCG API is currently having trouble processing the request."
-            )
-
+        if not results:
+            st.warning("No live results returned. Try a broader search.")
         else:
+            labels = [
+                f"{c.get('name')} — {(c.get('set') or {}).get('name','')} — {c.get('id','')}"
+                for c in results
+            ]
+            idx = st.selectbox("Select card", range(len(results)), format_func=lambda i: labels[i])
+            card = results[idx]
+            score = score_card(card)
+            cm = get_cardmarket_snapshot(card)
 
-            search_cards = response.json().get("data", [])
+            left, right = st.columns([1, 2.4])
+            with left:
+                img = card.get("image") or (card.get("images") or {}).get("large") or (card.get("images") or {}).get("small")
+                if img:
+                    st.image(img, use_container_width=True)
+                if st.button("⭐ Add to watchlist", use_container_width=True):
+                    add_watchlist(card)
+                    st.success("Added.")
+                if st.button("➕ Add to portfolio", use_container_width=True):
+                    add_portfolio(card, quantity=1, cost=cm.get("trend") or 0)
+                    st.success("Added with quantity 1.")
 
-            results = []
+            with right:
+                st.markdown(f"# {card.get('name')}")
+                st.caption(f"{(card.get('set') or {}).get('name','')} • {card.get('rarity','')} • {card.get('id','')}")
+                render_score_gauge(score["pii"], recommendation_label(score["pii"]))
 
-            for card in search_cards:
+                m1,m2,m3,m4 = st.columns(4)
+                m1.metric("Trend", f"€{cm['trend']:.2f}" if cm.get("trend") is not None else "—")
+                m2.metric("1-day avg", f"€{cm['avg1']:.2f}" if cm.get("avg1") is not None else "—")
+                m3.metric("7-day avg", f"€{cm['avg7']:.2f}" if cm.get("avg7") is not None else "—")
+                m4.metric("30-day avg", f"€{cm['avg30']:.2f}" if cm.get("avg30") is not None else "—")
 
-                prices = (
-                    card
-                    .get("cardmarket", {})
-                    .get("prices", {})
-                )
+                st.markdown("### Investment thesis")
+                for line in build_thesis(card, score):
+                    st.markdown(f"- {line}")
 
-                trend_price = prices.get("trendPrice")
-
-                if trend_price is None:
-                    continue
-
-                scores = score_card(card)
-
-                results.append({
-                    "Card": card.get("name"),
-                    "Set": card.get("set", {}).get("name"),
-                    "Rarity": card.get("rarity"),
-                    "Trend Price €": trend_price,
-                    "Low Price €": prices.get("lowPrice"),
-                    "Average Sell €": prices.get("averageSellPrice"),
-                    "PII": scores["PII"],
-                    "Popularity": scores["Popularity"],
-                    "Rarity Score": scores["RarityScore"],
-                    "Value Score": scores["ValueScore"],
-                    "Market Strength": scores["MarketStrength"],
-                    "Image": card.get("images", {}).get("small")
+                st.markdown("### PII breakdown")
+                breakdown = pd.DataFrame({
+                    "Factor": ["Momentum","Value","Rarity","Popularity","Liquidity proxy","Risk quality","Data confidence"],
+                    "Score": [
+                        score["momentum"], score["value"], score["rarity"], score["popularity"],
+                        score["liquidity"], score["risk_quality"], score["confidence"]
+                    ]
                 })
+                st.bar_chart(breakdown.set_index("Factor"))
 
-            if not results:
-
-                st.warning(
-                    "No cards with Cardmarket pricing were found."
-                )
-
+            st.markdown("## Graded market")
+            st.info(
+                "The UI is ready for PSA, BGS/Beckett, CGC, TAG, SGC and ACE sold comps. "
+                "For a commercial launch, this should only be switched on when we have a licensed/approved data feed."
+            )
+            graded = pd.read_csv("data/graded_market.csv")
+            graded = graded[graded["card_id"] == card.get("id")]
+            if graded.empty:
+                st.caption("No graded records loaded for this card yet.")
             else:
+                st.dataframe(graded, use_container_width=True, hide_index=True)
 
-                df = pd.DataFrame(results)
+            st.markdown("## Population & supply")
+            pops = pd.read_csv("data/populations.csv")
+            pops = pops[pops["card_id"] == card.get("id")]
+            if pops.empty:
+                st.caption("No population records loaded for this card yet.")
+            else:
+                st.dataframe(pops, use_container_width=True, hide_index=True)
 
-                df = df.sort_values(
-                    "PII",
-                    ascending=False
-                ).reset_index(drop=True)
+# ---------------- Portfolio ----------------
+elif page == "Portfolio":
+    st.title("Portfolio")
+    portfolio = get_portfolio()
+    if not portfolio:
+        st.info("Add cards from Card Analyzer to start your portfolio.")
+    else:
+        pdf = pd.DataFrame(portfolio)
+        invested = (pdf["quantity"] * pdf["cost_basis"]).sum()
+        st.metric("Cost basis", f"€{invested:,.2f}")
+        st.dataframe(pdf, use_container_width=True, hide_index=True)
+        st.caption("Prototype storage is local to the running app. Supabase authentication/storage is the next production step.")
 
-                top = df.iloc[0]
+# ---------------- Watchlist ----------------
+elif page == "Watchlist":
+    st.title("Watchlist")
+    wl = get_watchlist()
+    if not wl:
+        st.info("Add cards from Card Analyzer.")
+    else:
+        for item in wl:
+            c1,c2,c3 = st.columns([1,5,1])
+            with c1:
+                if item.get("image"):
+                    st.image(item["image"], width=90)
+            with c2:
+                st.markdown(f"**{item['name']}**")
+                st.caption(f"{item.get('set_name','')} • {item['card_id']}")
+            with c3:
+                if st.button("Remove", key=f"rm-{item['card_id']}"):
+                    remove_watchlist(item["card_id"])
+                    st.rerun()
 
-                st.markdown("### 🥇 Best Search Result")
+# ---------------- Methodology ----------------
+else:
+    st.title("PII Methodology")
+    st.markdown("""
+The **Pokémon Investment Index (PII)** is intentionally explainable. It does not predict guaranteed returns.
 
-                image_col, info_col = st.columns([1, 3])
+Current prototype weighting:
 
-                with image_col:
+- **25% Momentum** — compares current/short-term price signals with the 30-day average.
+- **20% Value** — rewards cards trading below recent averages without blindly rewarding collapsing prices.
+- **15% Rarity / collectability** — illustration rares, special illustration rares, secrets and premium variants.
+- **15% Character demand** — a deliberately capped demand prior; it helps Charizard, Pikachu, Gengar, Eeveelutions etc., but cannot determine the result by itself.
+- **10% Liquidity proxy** — availability of multiple market observations and consistency between them.
+- **10% Risk quality** — volatility and data-quality penalties.
+- **5% Data confidence** — how complete the market record is.
 
-                    if top["Image"]:
-
-                        st.image(
-                            top["Image"],
-                            use_container_width=True
-                        )
-
-                with info_col:
-
-                    st.markdown(
-                        f"## {top['Card']}"
-                    )
-
-                    st.write(
-                        f"**Set:** {top['Set']}"
-                    )
-
-                    st.write(
-                        f"**Rarity:** {top['Rarity']}"
-                    )
-
-                    st.metric(
-                        "PII Score",
-                        f"{int(top['PII'])}/100"
-                    )
-
-                    st.write(
-                        recommendation(top["PII"])
-                    )
-
-                    metric1, metric2, metric3 = st.columns(3)
-
-                    metric1.metric(
-                        "Trend Price",
-                        f"€{top['Trend Price €']:.2f}"
-                    )
-
-                    if pd.notna(top["Low Price €"]):
-
-                        metric2.metric(
-                            "Low Price",
-                            f"€{top['Low Price €']:.2f}"
-                        )
-
-                    if pd.notna(top["Average Sell €"]):
-
-                        metric3.metric(
-                            "Average Sell",
-                            f"€{top['Average Sell €']:.2f}"
-                        )
-
-                st.markdown("### 📊 All Matching Cards")
-
-                st.dataframe(
-                    df.drop(columns=["Image"]),
-                    use_container_width=True,
-                    hide_index=True
-                )
-
-
-# ---------------------------------------------------------
-# FOOTER
-# ---------------------------------------------------------
-
-st.divider()
-
-st.caption(
-    "Pokemon Alpha MVP • PII scores are experimental and are not financial advice."
-)
+The production model should add **actual sold-volume/liquidity, graded sold comps, population growth, set-print/reprint risk, and longer proprietary price history**.
+""")
+    st.warning(
+        "Important commercial point: eBay Marketplace Insights/sold-data access is restricted, so a consumer subscription product "
+        "should use an approved eBay relationship or a licensed third-party graded-data provider rather than unauthorized scraping."
+    )
