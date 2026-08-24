@@ -1,297 +1,288 @@
 import streamlit as st
 import pandas as pd
-from datetime import datetime
 
-from data_provider import (
-    search_cards,
-    get_market_universe,
-    demo_universe,
-    get_cardmarket_snapshot,
+from supabase_db import (
+    connection_check, load_market, load_price_history, load_population,
+    upsert_cards, insert_price_snapshots
 )
-from scoring import score_card, recommendation_label, build_thesis, price_band
-from storage import init_store, add_watchlist, get_watchlist, remove_watchlist, add_portfolio, get_portfolio
-from ui import inject_css, render_score_gauge, render_metric_card
+from eu_market import fetch_eu_sample
+from scoring import score, signal, thesis
+from ui import css, card_metric, score_box
 
 st.set_page_config(
-    page_title="Pokémon Alpha",
+    page_title="Pokémon Alpha Europe",
     page_icon="📈",
     layout="wide",
     initial_sidebar_state="expanded",
 )
+css()
 
-inject_css()
-init_store()
-
-# ---------------- Sidebar ----------------
 with st.sidebar:
     st.markdown("# 📈 Pokémon Alpha")
-    st.caption("Investment intelligence for Pokémon cards")
+    st.caption("European Pokémon investment intelligence")
     page = st.radio(
-        "Navigate",
-        ["Dashboard", "Screener", "Card Analyzer", "Portfolio", "Watchlist", "Methodology"],
-        label_visibility="collapsed",
+        "Navigation",
+        ["Dashboard", "Screener", "Card Analyzer", "Market Sync", "Methodology"],
+        label_visibility="collapsed"
     )
     st.divider()
-    st.caption("Prototype data sources")
-    st.markdown("**Raw market:** Cardmarket / TCGdex")
-    st.markdown("**US market:** TCGplayer / TCGdex")
-    st.markdown("**Graded:** connector-ready")
-    st.markdown("**Population:** connector-ready")
+    ok, status = connection_check()
+    if ok:
+        st.success("Supabase connected")
+    else:
+        st.error("Supabase not connected")
+    st.markdown("**Market:** 🇪🇺 Europe")
+    st.markdown("**Raw pricing:** Cardmarket")
+    st.markdown("**Currency:** EUR")
+    st.markdown("**US market:** Not enabled")
+    st.markdown("**Graded:** Coming via licensed feed")
+    st.markdown("**Population:** Database ready")
     st.divider()
-    st.caption("PII scores are experimental research signals, not financial advice.")
+    st.caption("Experimental research signals, not financial advice.")
 
-# ---------------- Helpers ----------------
-@st.cache_data(ttl=3600, show_spinner=False)
-def load_universe():
-    live = get_market_universe(limit=500)
-    if live:
-        return live, "Live"
-    return demo_universe(), "Demo fallback"
+market = load_market()
+df = pd.DataFrame()
 
-def dataframe_from_cards(cards):
+if market:
     rows = []
-    for card in cards:
-        score = score_card(card)
-        cm = get_cardmarket_snapshot(card)
+    for r in market:
+        s = score(r)
         rows.append({
-            "ID": card.get("id"),
-            "Card": card.get("name"),
-            "Set": (card.get("set") or {}).get("name", ""),
-            "Rarity": card.get("rarity", ""),
-            "Price €": cm.get("trend"),
-            "Avg 1d €": cm.get("avg1"),
-            "Avg 7d €": cm.get("avg7"),
-            "Avg 30d €": cm.get("avg30"),
-            "30d Momentum %": score["momentum_30d"],
-            "PII": score["pii"],
-            "Signal": recommendation_label(score["pii"]),
-            "Confidence": score["confidence"],
-            "Popularity": score["popularity"],
-            "Value": score["value"],
-            "Rarity Score": score["rarity"],
-            "Liquidity Proxy": score["liquidity"],
-            "Image": card.get("image") or (card.get("images") or {}).get("small"),
-            "_card": card,
+            **r,
+            "PII": s["pii"],
+            "30d Momentum %": s["momentum30"],
+            "Value": s["value"],
+            "Popularity": s["popularity"],
+            "Rarity Score": s["rarity_score"],
+            "Liquidity Proxy": s["liquidity"],
+            "Risk Quality": s["risk_quality"],
+            "Confidence": s["confidence"],
+            "Signal": signal(s["pii"]),
         })
-    return pd.DataFrame(rows)
+    df = pd.DataFrame(rows)
 
-cards, source_mode = load_universe()
-df = dataframe_from_cards(cards)
-
-# ---------------- Dashboard ----------------
 if page == "Dashboard":
-    st.title("Pokémon Alpha")
-    st.markdown("### Find the cards with the strongest **risk-adjusted investment signals**.")
+    st.title("Pokémon Alpha 🇪🇺")
+    st.markdown("### European Pokémon card investment intelligence")
+    st.caption("This dashboard reads from your Supabase database, so it does not depend on a live API request every time somebody visits.")
 
-    c1, c2, c3, c4 = st.columns(4)
+    c1,c2,c3,c4 = st.columns(4)
     with c1:
-        render_metric_card("Cards evaluated", f"{len(df):,}", source_mode)
+        card_metric("Cards in database", f"{len(df):,}", "European universe")
     with c2:
-        strong = int((df["PII"] >= 82).sum()) if not df.empty else 0
-        render_metric_card("Strong signals", strong, "PII ≥ 82")
+        strong = int((df["PII"] >= 80).sum()) if not df.empty else 0
+        card_metric("Strong signals", strong, "PII ≥ 80")
     with c3:
         median = int(df["PII"].median()) if not df.empty else 0
-        render_metric_card("Median PII", median, "Current universe")
+        card_metric("Median PII", median, "Current database")
     with c4:
-        updated = datetime.now().strftime("%H:%M")
-        render_metric_card("Last refresh", updated, "Cache: 60 min")
+        card_metric("Market", "EUR", "Cardmarket")
 
-    st.markdown("## 🏆 Best candidate by price band")
-    bands = [(0,5),(5,10),(10,15),(15,20),(20,30),(30,50),(50,75),(75,100),(100,150),(150,250)]
-    winners = []
-    for lo, hi in bands:
-        band_df = df[(df["Price €"].notna()) & (df["Price €"] >= lo) & (df["Price €"] < hi)].copy()
-        if not band_df.empty:
-            winners.append((lo, hi, band_df.sort_values(["PII","Confidence"], ascending=False).iloc[0]))
+    if df.empty:
+        st.info("Your database is connected but currently empty.")
+        st.markdown("""
+### First data import
 
-    for start in (0,5):
-        cols = st.columns(5)
-        for col, item in zip(cols, winners[start:start+5]):
-            lo, hi, row = item
-            with col:
-                st.markdown(f"#### €{lo}–€{hi}")
-                if row["Image"]:
-                    st.image(row["Image"], use_container_width=True)
-                st.markdown(f"**{row['Card']}**")
-                st.caption(row["Set"])
-                st.metric("PII", f"{int(row['PII'])}/100")
-                if pd.notna(row["Price €"]):
-                    st.markdown(f"**€{row['Price €']:.2f}**")
-                st.caption(recommendation_label(row["PII"]))
+Open **Market Sync** in the left menu and press **Sync EU market now**.
 
-    st.markdown("## 🚀 Opportunity leaderboard")
-    leaderboard = df[df["Price €"].notna()].sort_values(["PII","30d Momentum %","Confidence"], ascending=False).head(15)
-    st.dataframe(
-        leaderboard[["Card","Set","Price €","PII","Signal","30d Momentum %","Confidence"]],
-        use_container_width=True, hide_index=True
-    )
+That will:
+1. retrieve a starter universe of European cards;
+2. store card metadata in Supabase;
+3. store today's Cardmarket snapshot;
+4. make Dashboard, Screener and Card Analyzer work from your own database.
+""")
+    else:
+        st.markdown("## 🏆 Best candidate by European price band")
+        bands=[(0,5),(5,10),(10,15),(15,20),(20,30),(30,50),(50,75),(75,100),(100,150),(150,250)]
+        winners=[]
+        for lo,hi in bands:
+            b=df[(df["trend"].notna()) & (df["trend"]>=lo) & (df["trend"]<hi)]
+            if not b.empty:
+                winners.append((lo,hi,b.sort_values(["PII","Confidence"],ascending=False).iloc[0]))
 
-    st.markdown("## 📉 Potential value entries")
-    value = df[df["Price €"].notna()].sort_values(["Value","PII"], ascending=False).head(10)
-    st.dataframe(
-        value[["Card","Set","Price €","Value","PII","30d Momentum %"]],
-        use_container_width=True, hide_index=True
-    )
+        for start in (0,5):
+            cols=st.columns(5)
+            for col,item in zip(cols,winners[start:start+5]):
+                lo,hi,row=item
+                with col:
+                    st.markdown(f"#### €{lo}–€{hi}")
+                    if row.get("image_url"):
+                        st.image(row["image_url"],use_container_width=True)
+                    st.markdown(f"**{row['name']}**")
+                    st.caption(row.get("set_name",""))
+                    st.metric("PII",f"{int(row['PII'])}/100")
+                    st.markdown(f"**€{row['trend']:.2f}**")
+                    st.caption(row["Signal"])
 
-# ---------------- Screener ----------------
+        st.markdown("## 🚀 European opportunity leaderboard")
+        lead=df[df["trend"].notna()].sort_values(["PII","Confidence"],ascending=False).head(20)
+        st.dataframe(
+            lead[["name","set_name","rarity","trend","avg7","avg30","30d Momentum %","PII","Signal","Confidence"]],
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "trend": st.column_config.NumberColumn("Trend €", format="€%.2f"),
+                "avg7": st.column_config.NumberColumn("7d avg €", format="€%.2f"),
+                "avg30": st.column_config.NumberColumn("30d avg €", format="€%.2f"),
+            }
+        )
+
 elif page == "Screener":
-    st.title("Investment Screener")
-    st.caption("Filter the market rather than browsing one Pokémon at a time.")
+    st.title("EU Investment Screener")
+    if df.empty:
+        st.info("Run Market Sync first.")
+    else:
+        a,b,c,d=st.columns(4)
+        min_price=a.number_input("Minimum €",0.0,10000.0,0.0,5.0)
+        max_price=b.number_input("Maximum €",0.0,10000.0,250.0,10.0)
+        min_pii=c.slider("Minimum PII",0,100,60)
+        min_mom=d.slider("Minimum 30d momentum %",-75,150,-10)
 
-    fc1, fc2, fc3, fc4 = st.columns(4)
-    min_price = fc1.number_input("Min €", min_value=0.0, value=0.0, step=5.0)
-    max_price = fc2.number_input("Max €", min_value=1.0, value=250.0, step=10.0)
-    min_pii = fc3.slider("Minimum PII", 0, 100, 60)
-    min_momentum = fc4.slider("Min 30d momentum %", -50, 100, -10)
+        f=df[
+            (df["trend"].notna()) &
+            (df["trend"]>=min_price) &
+            (df["trend"]<=max_price) &
+            (df["PII"]>=min_pii) &
+            (df["30d Momentum %"]>=min_mom)
+        ].copy()
 
-    filtered = df[
-        (df["Price €"].notna()) &
-        (df["Price €"] >= min_price) &
-        (df["Price €"] <= max_price) &
-        (df["PII"] >= min_pii) &
-        (df["30d Momentum %"] >= min_momentum)
-    ].copy()
+        sort=st.selectbox("Sort by",["PII","30d Momentum %","Value","Confidence","trend"])
+        f=f.sort_values(sort,ascending=(sort=="trend"))
+        st.metric("Matching European cards",len(f))
+        st.dataframe(
+            f[["name","set_name","rarity","trend","avg7","avg30","30d Momentum %","Value","PII","Signal","Confidence"]],
+            use_container_width=True,hide_index=True
+        )
 
-    sort_by = st.selectbox("Sort by", ["PII", "30d Momentum %", "Value", "Confidence", "Price €"])
-    ascending = sort_by == "Price €"
-    filtered = filtered.sort_values(sort_by, ascending=ascending)
-
-    st.metric("Matches", len(filtered))
-    st.dataframe(
-        filtered[["Card","Set","Rarity","Price €","Avg 7d €","Avg 30d €","30d Momentum %","PII","Signal","Confidence"]],
-        use_container_width=True, hide_index=True
-    )
-
-# ---------------- Analyzer ----------------
 elif page == "Card Analyzer":
-    st.title("Card Analyzer")
-    query = st.text_input("Search card or Pokémon", placeholder="e.g. Gengar, Umbreon, Charizard")
+    st.title("Card Analyzer 🇪🇺")
+    if df.empty:
+        st.info("Run Market Sync first.")
+    else:
+        q=st.text_input("Search your European card database",placeholder="Gengar")
+        filtered=df
+        if q:
+            filtered=df[df["name"].str.contains(q,case=False,na=False)]
 
-    if query:
-        with st.spinner("Searching market data..."):
-            results = search_cards(query, limit=50)
-
-        if not results:
-            st.warning("No live results returned. Try a broader search.")
+        if filtered.empty:
+            st.warning("No matching card in the current synced universe.")
         else:
-            labels = [
-                f"{c.get('name')} — {(c.get('set') or {}).get('name','')} — {c.get('id','')}"
-                for c in results
-            ]
-            idx = st.selectbox("Select card", range(len(results)), format_func=lambda i: labels[i])
-            card = results[idx]
-            score = score_card(card)
-            cm = get_cardmarket_snapshot(card)
+            options=filtered.index.tolist()
+            idx=st.selectbox(
+                "Select card",
+                options,
+                format_func=lambda i:f"{df.loc[i,'name']} — {df.loc[i,'set_name']} — {df.loc[i,'id']}"
+            )
+            row=df.loc[idx].to_dict()
+            s=score(row)
 
-            left, right = st.columns([1, 2.4])
+            left,right=st.columns([1,2.5])
             with left:
-                img = card.get("image") or (card.get("images") or {}).get("large") or (card.get("images") or {}).get("small")
-                if img:
-                    st.image(img, use_container_width=True)
-                if st.button("⭐ Add to watchlist", use_container_width=True):
-                    add_watchlist(card)
-                    st.success("Added.")
-                if st.button("➕ Add to portfolio", use_container_width=True):
-                    add_portfolio(card, quantity=1, cost=cm.get("trend") or 0)
-                    st.success("Added with quantity 1.")
-
+                if row.get("image_url"):
+                    st.image(row["image_url"],use_container_width=True)
             with right:
-                st.markdown(f"# {card.get('name')}")
-                st.caption(f"{(card.get('set') or {}).get('name','')} • {card.get('rarity','')} • {card.get('id','')}")
-                render_score_gauge(score["pii"], recommendation_label(score["pii"]))
+                st.markdown(f"# {row['name']}")
+                st.caption(f"{row.get('set_name','')} • {row.get('rarity','')}")
+                score_box(s["pii"],signal(s["pii"]))
 
-                m1,m2,m3,m4 = st.columns(4)
-                m1.metric("Trend", f"€{cm['trend']:.2f}" if cm.get("trend") is not None else "—")
-                m2.metric("1-day avg", f"€{cm['avg1']:.2f}" if cm.get("avg1") is not None else "—")
-                m3.metric("7-day avg", f"€{cm['avg7']:.2f}" if cm.get("avg7") is not None else "—")
-                m4.metric("30-day avg", f"€{cm['avg30']:.2f}" if cm.get("avg30") is not None else "—")
+                m1,m2,m3,m4=st.columns(4)
+                m1.metric("Trend",f"€{row['trend']:.2f}" if row.get("trend") is not None else "—")
+                m2.metric("1d avg",f"€{row['avg1']:.2f}" if row.get("avg1") is not None else "—")
+                m3.metric("7d avg",f"€{row['avg7']:.2f}" if row.get("avg7") is not None else "—")
+                m4.metric("30d avg",f"€{row['avg30']:.2f}" if row.get("avg30") is not None else "—")
 
                 st.markdown("### Investment thesis")
-                for line in build_thesis(card, score):
-                    st.markdown(f"- {line}")
+                for item in thesis(row,s):
+                    st.markdown(f"- {item}")
 
-                st.markdown("### PII breakdown")
-                breakdown = pd.DataFrame({
-                    "Factor": ["Momentum","Value","Rarity","Popularity","Liquidity proxy","Risk quality","Data confidence"],
-                    "Score": [
-                        score["momentum"], score["value"], score["rarity"], score["popularity"],
-                        score["liquidity"], score["risk_quality"], score["confidence"]
-                    ]
-                })
-                st.bar_chart(breakdown.set_index("Factor"))
+            st.markdown("## Proprietary price history")
+            hist=load_price_history(row["id"])
+            if len(hist)<2:
+                st.caption("History will build each time the market sync runs. Repeated daily snapshots become your proprietary dataset.")
+            else:
+                h=pd.DataFrame(hist)
+                h["recorded_at"]=pd.to_datetime(h["recorded_at"])
+                chart=h.set_index("recorded_at")[["trend_price_eur","avg_7d_eur","avg_30d_eur"]]
+                chart.columns=["Trend","7d average","30d average"]
+                st.line_chart(chart)
 
             st.markdown("## Graded market")
-            st.info(
-                "The UI is ready for PSA, BGS/Beckett, CGC, TAG, SGC and ACE sold comps. "
-                "For a commercial launch, this should only be switched on when we have a licensed/approved data feed."
-            )
-            graded = pd.read_csv("data/graded_market.csv")
-            graded = graded[graded["card_id"] == card.get("id")]
-            if graded.empty:
-                st.caption("No graded records loaded for this card yet.")
+            st.info("PSA, BGS/Beckett, CGC, TAG, SGC and ACE sold comps will plug in here once we select a feed that permits commercial use.")
+
+            st.markdown("## Population")
+            pop=load_population(row["id"])
+            if not pop:
+                st.caption("No population snapshots loaded yet.")
             else:
-                st.dataframe(graded, use_container_width=True, hide_index=True)
+                st.dataframe(pd.DataFrame(pop),use_container_width=True,hide_index=True)
 
-            st.markdown("## Population & supply")
-            pops = pd.read_csv("data/populations.csv")
-            pops = pops[pops["card_id"] == card.get("id")]
-            if pops.empty:
-                st.caption("No population records loaded for this card yet.")
-            else:
-                st.dataframe(pops, use_container_width=True, hide_index=True)
-
-# ---------------- Portfolio ----------------
-elif page == "Portfolio":
-    st.title("Portfolio")
-    portfolio = get_portfolio()
-    if not portfolio:
-        st.info("Add cards from Card Analyzer to start your portfolio.")
-    else:
-        pdf = pd.DataFrame(portfolio)
-        invested = (pdf["quantity"] * pdf["cost_basis"]).sum()
-        st.metric("Cost basis", f"€{invested:,.2f}")
-        st.dataframe(pdf, use_container_width=True, hide_index=True)
-        st.caption("Prototype storage is local to the running app. Supabase authentication/storage is the next production step.")
-
-# ---------------- Watchlist ----------------
-elif page == "Watchlist":
-    st.title("Watchlist")
-    wl = get_watchlist()
-    if not wl:
-        st.info("Add cards from Card Analyzer.")
-    else:
-        for item in wl:
-            c1,c2,c3 = st.columns([1,5,1])
-            with c1:
-                if item.get("image"):
-                    st.image(item["image"], width=90)
-            with c2:
-                st.markdown(f"**{item['name']}**")
-                st.caption(f"{item.get('set_name','')} • {item['card_id']}")
-            with c3:
-                if st.button("Remove", key=f"rm-{item['card_id']}"):
-                    remove_watchlist(item["card_id"])
-                    st.rerun()
-
-# ---------------- Methodology ----------------
-else:
-    st.title("PII Methodology")
+elif page == "Market Sync":
+    st.title("EU Market Sync")
     st.markdown("""
-The **Pokémon Investment Index (PII)** is intentionally explainable. It does not predict guaranteed returns.
+This is your **data collection step**.
 
-Current prototype weighting:
+The public dashboard does not contact external market APIs every time somebody visits. Instead, this page imports a European starter universe into **your Supabase database**.
 
-- **25% Momentum** — compares current/short-term price signals with the 30-day average.
-- **20% Value** — rewards cards trading below recent averages without blindly rewarding collapsing prices.
-- **15% Rarity / collectability** — illustration rares, special illustration rares, secrets and premium variants.
-- **15% Character demand** — a deliberately capped demand prior; it helps Charizard, Pikachu, Gengar, Eeveelutions etc., but cannot determine the result by itself.
-- **10% Liquidity proxy** — availability of multiple market observations and consistency between them.
-- **10% Risk quality** — volatility and data-quality penalties.
-- **5% Data confidence** — how complete the market record is.
-
-The production model should add **actual sold-volume/liquidity, graded sold comps, population growth, set-print/reprint risk, and longer proprietary price history**.
+For the prototype you run it manually. Later we automate it once per day.
 """)
-    st.warning(
-        "Important commercial point: eBay Marketplace Insights/sold-data access is restricted, so a consumer subscription product "
-        "should use an approved eBay relationship or a licensed third-party graded-data provider rather than unauthorized scraping."
-    )
+
+    ok,status=connection_check()
+    if not ok:
+        st.error(f"Supabase connection failed: {status}")
+    else:
+        st.success("Supabase is connected.")
+        size=st.slider("Cards to sync",20,120,60,10)
+
+        if st.button("🇪🇺 Sync EU market now",type="primary",use_container_width=True):
+            progress=st.progress(5,text="Retrieving European market data...")
+            cards,error=fetch_eu_sample(size)
+
+            if error:
+                progress.empty()
+                st.error(error)
+            else:
+                progress.progress(65,text="Writing card metadata to Supabase...")
+                try:
+                    n1=upsert_cards(cards)
+                    progress.progress(82,text="Saving today's Cardmarket snapshots...")
+                    n2=insert_price_snapshots(cards)
+                    progress.progress(100,text="Done")
+                    st.success(f"Synced {n1} cards and stored {n2} European price snapshots.")
+                    st.info("Return to Dashboard and refresh once.")
+                except Exception as e:
+                    progress.empty()
+                    st.error(f"Supabase write failed: {e}")
+                    st.warning(
+                        "If the error mentions permissions or RLS, send me the exact error. "
+                        "I will give you the one SQL command needed for this prototype."
+                    )
+
+else:
+    st.title("Pokémon Investment Index — Europe")
+    st.markdown("""
+The PII is an explainable **European-market research signal**.
+
+Current prototype weights:
+
+- **25% price momentum**
+- **20% value / entry level**
+- **15% rarity / collectability**
+- **15% character demand**
+- **10% liquidity proxy**
+- **10% volatility / risk quality**
+- **5% data confidence**
+
+Current market inputs are **Cardmarket EUR prices**: trend, low, average selling price, and 1/7/30-day averages where available.
+
+### Planned production additions
+
+- actual transaction liquidity / sales velocity;
+- PSA, BGS/Beckett, CGC, TAG, SGC and ACE graded sold comps;
+- population and population-growth history;
+- set age, print supply and reprint risk;
+- longer proprietary daily price history;
+- portfolios and alerts;
+- user accounts and subscription billing.
+
+**US pricing and TCGplayer are intentionally not part of this version.**
+""")

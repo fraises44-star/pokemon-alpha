@@ -1,60 +1,40 @@
-# Pokémon Alpha — Commercial Prototype
+# Pokémon Alpha V0.3 — EU + Supabase
 
-A Streamlit MVP for Pokémon card investment research.
+This build is intentionally Europe-first.
 
-## What is included
-- Executive dashboard
-- 10 non-overlapping price-band winners
-- Market screener
-- Card analyzer
-- Explainable Pokémon Investment Index (PII)
-- Cardmarket trend / 1-day / 7-day / 30-day signals via TCGdex
-- TCGplayer-ready normalized payload
-- Watchlist
-- Portfolio foundation
-- Graded-sales table connector
-- Population table connector
-- Demo fallback if a public API is unavailable
-- Commercial-data warnings rather than silent scraping
+## Architecture
 
-## Deploy
-1. Upload all files to the root of your GitHub repository.
-2. Keep the `data` folder.
-3. Streamlit Community Cloud should use `app.py`.
-4. No API key is required for the TCGdex prototype.
-5. Reboot the Streamlit app after replacing the files.
+European Cardmarket data (prototype ingestion via TCGdex)
+→ explicit Market Sync
+→ Supabase
+→ Pokémon Alpha dashboard
 
-## Important production limitations
-The prototype is designed to validate UX and the scoring concept. Before charging users:
+The dashboard reads from Supabase and therefore does not sit blank while dozens of external API requests execute.
 
-1. Move watchlists/portfolios to Supabase/Postgres with user authentication.
-2. Run market ingestion as scheduled jobs and save proprietary daily snapshots.
-3. Add a licensed/approved graded-sales feed.
-4. Add PSA/CGC/BGS/TAG population data only under terms that allow your use.
-5. Add billing (Stripe) only after the data rights and product-market fit are clear.
-6. Replace public API-on-page-load architecture with your own database/cache.
+## Streamlit secrets
 
-## Graded data CSV schema
-`data/graded_market.csv`
+```toml
+SUPABASE_URL = "..."
+SUPABASE_ANON_KEY = "..."
+```
 
-- card_id
-- grader
-- grade
-- last_sold
-- currency
-- sold_date
-- avg_30d
-- sales_30d
-- source
+Your older POKEMONTCG_API_KEY can remain; V0.3 does not use it.
 
-## Population CSV schema
-`data/populations.csv`
+## First run
 
-- card_id
-- grader
-- grade
-- population
-- population_30d_ago
-- population_90d_ago
-- updated_at
-- source
+1. Deploy all files to GitHub.
+2. Reboot Streamlit.
+3. Open **Market Sync**.
+4. Choose 40–60 cards.
+5. Click **Sync EU market now**.
+6. Return to Dashboard.
+
+## Next production steps
+
+- scheduled daily ingestion;
+- proper authentication and RLS;
+- permanent watchlists / portfolios;
+- licensed graded-sales feed;
+- population-data feed with commercial rights;
+- Stripe subscriptions;
+- monitoring and backups.
