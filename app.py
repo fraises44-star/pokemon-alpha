@@ -237,7 +237,7 @@ For the prototype you run it manually. Later we automate it once per day.
         st.error(f"Supabase connection failed: {status}")
     else:
         st.success("Supabase is connected.")
-        size=st.slider("Cards to sync",20,120,60,10)
+        size=st.slider("Cards to sync",20,300,300,20)
 
         if st.button("🇪🇺 Sync EU market now",type="primary",use_container_width=True):
             progress=st.progress(5,text="Retrieving European market data...")
