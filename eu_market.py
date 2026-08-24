@@ -55,25 +55,46 @@ def normalize(full):
         "prices": prices,
     }
 
-def fetch_eu_sample(max_cards=60):
-    stubs = _get(f"{BASE}/cards", timeout=25)
+def fetch_eu_sample(max_cards=300):
+
+    stubs = _get(
+        f"{BASE}/cards",
+        timeout=25
+    )
+
     if not stubs:
         return [], "Could not retrieve TCGdex card index."
+
     wanted = []
+
+    # Prefer newer cards first
     for stub in reversed(stubs):
-        name = (stub.get("name") or "").lower()
-        if any(p.lower() in name for p in POPULAR):
-            wanted.append(stub)
-        if len(wanted) >= max_cards * 3:
+
+        wanted.append(stub)
+
+        if len(wanted) >= max_cards * 4:
             break
+
     out = []
+
     for stub in wanted:
-        card = normalize(_get(f"{BASE}/cards/{stub.get('id')}", timeout=10))
+
+        full = _get(
+            f"{BASE}/cards/{stub.get('id')}",
+            timeout=10
+        )
+
+        card = normalize(full)
+
         if card:
             out.append(card)
+
         if len(out) >= max_cards:
             break
-        time.sleep(0.03)
+
+        time.sleep(0.02)
+
     if not out:
         return [], "No cards with European Cardmarket pricing were returned."
+
     return out, None
