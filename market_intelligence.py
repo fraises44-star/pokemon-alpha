@@ -355,59 +355,46 @@ def calculate_opportunity_score(
     reprint_risk_score,
 ):
     components = {
-        "momentum": (
-            safe_float(
-                momentum_score
-            )
-            or 50
-        ),
-        "value": (
-            safe_float(
-                value_score
-            )
-            or 50
-        ),
-        "liquidity": (
-            safe_float(
-                liquidity_score
-            )
-            or 50
-        ),
-        "volatility": (
-            safe_float(
-                volatility_score
-            )
-            or 50
-        ),
-        "graded_premium": (
-            safe_float(
-                graded_premium_score
-            )
-            or 50
-        ),
-        "population": (
-            safe_float(
-                population_score
-            )
-            or 50
-        ),
-        "reprint_risk": (
-            safe_float(
-                reprint_risk_score
-            )
-            or 50
-        ),
+        "momentum": safe_float(momentum_score),
+        "value": safe_float(value_score),
+        "liquidity": safe_float(liquidity_score),
+        "volatility": safe_float(volatility_score),
+        "graded_premium": safe_float(graded_premium_score),
+        "population": safe_float(population_score),
+        "reprint_risk": safe_float(reprint_risk_score),
     }
 
-    score = (
-        components["momentum"] * 0.20
-        + components["value"] * 0.20
-        + components["liquidity"] * 0.15
-        + components["volatility"] * 0.10
-        + components["graded_premium"] * 0.15
-        + components["population"] * 0.10
-        + components["reprint_risk"] * 0.10
+    weights = {
+        "momentum": 0.20,
+        "value": 0.20,
+        "liquidity": 0.15,
+        "volatility": 0.10,
+        "graded_premium": 0.15,
+        "population": 0.10,
+        "reprint_risk": 0.10,
+    }
+
+    available = {
+        key: value
+        for key, value in components.items()
+        if value is not None
+    }
+
+    if not available:
+        return None
+
+    available_weight = sum(
+        weights[key]
+        for key in available
     )
+
+    if available_weight <= 0:
+        return None
+
+    score = sum(
+        available[key] * weights[key]
+        for key in available
+    ) / available_weight
 
     return round(
         clamp(score),
