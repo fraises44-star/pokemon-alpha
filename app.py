@@ -2,8 +2,14 @@ import streamlit as st
 import pandas as pd
 
 from supabase_db import (
-    connection_check, load_market, load_price_history, load_population,
-    upsert_cards, insert_price_snapshots
+    connection_check,
+    load_market,
+    load_price_history,
+    load_population,
+    load_graded_sales,
+    load_market_signals,
+    upsert_cards,
+    insert_price_snapshots
 )
 from eu_market import fetch_eu_sample
 from scoring import score, signal, thesis
