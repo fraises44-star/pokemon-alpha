@@ -10,7 +10,7 @@ headers = {
 }
 
 params = {
-    "q": "SMP SM158",
+    "q": "Charizard SM158",
     "game": "pokemon",
 }
 
