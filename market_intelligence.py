@@ -604,5 +604,6 @@ def build_market_signal(
         "graded_premium_score": graded_premium_score,
         "population_score": population_score,
         "reprint_risk_score": reprint_risk_score,
+        "data_confidence": data_confidence,
         "opportunity_score": opportunity_score,
     }
