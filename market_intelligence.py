@@ -209,7 +209,7 @@ def calculate_graded_premium_score(
         or raw_price <= 0
         or not graded_sales
     ):
-        return 50
+        return None
 
     prices = []
 
@@ -251,7 +251,7 @@ def calculate_population_score(
     population_history,
 ):
     if not population_history:
-        return 50
+         return None
 
     rows = []
 
