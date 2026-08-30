@@ -101,3 +101,71 @@ def load_population(card_id):
         .eq("card_id", card_id)
         .order("recorded_at", desc=True).limit(500).execute().data or []
     )
+def load_graded_sales(card_id, limit=200):
+    sb = get_supabase()
+
+    if sb is None:
+        return []
+
+    result = (
+        sb.table("graded_sales")
+        .select("*")
+        .eq("card_id", card_id)
+        .order("sold_at", desc=True)
+        .limit(limit)
+        .execute()
+    )
+
+    return result.data or []
+
+
+def load_market_signals(card_id=None, limit=500):
+    sb = get_supabase()
+
+    if sb is None:
+        return []
+
+    query = (
+        sb.table("market_signals")
+        .select("*")
+        .order("created_at", desc=True)
+        .limit(limit)
+    )
+
+    if card_id:
+        query = query.eq("card_id", card_id)
+
+    result = query.execute()
+
+    return result.data or []
+
+
+def save_market_signal(
+    card_id,
+    liquidity_score=None,
+    momentum_score=None,
+    volatility_score=None,
+    graded_premium_score=None,
+    population_score=None,
+    reprint_risk_score=None,
+    opportunity_score=None,
+):
+    sb = get_supabase()
+
+    if sb is None:
+        raise RuntimeError("Supabase is not connected.")
+
+    payload = {
+        "card_id": card_id,
+        "liquidity_score": liquidity_score,
+        "momentum_score": momentum_score,
+        "volatility_score": volatility_score,
+        "graded_premium_score": graded_premium_score,
+        "population_score": population_score,
+        "reprint_risk_score": reprint_risk_score,
+        "opportunity_score": opportunity_score,
+    }
+
+    sb.table("market_signals").insert(payload).execute()
+
+    return payload
