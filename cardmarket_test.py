@@ -25,8 +25,14 @@ response = requests.get(
 print("STATUS:", response.status_code)
 data = response.json()
 
-print("TYPE:", type(data))
-print("TOP LEVEL:", data.keys() if isinstance(data, dict) else "NOT A DICT")
-print("DATA TYPE:", type(data.get("data")) if isinstance(data, dict) else "N/A")
-print("DATA LENGTH:", len(data.get("data", [])) if isinstance(data, dict) else "N/A")
-print("FIRST ITEM:", data.get("data", [None])[0] if isinstance(data, dict) and data.get("data") else "NO ITEMS")
+cards = data.get("data", [])
+
+print("RESULTS:", len(cards))
+
+for number, card in enumerate(cards, start=1):
+    print(
+        number,
+        "| NAME:", card.get("name"),
+        "| CARDMARKET ID:", card.get("externalId"),
+        "| EXPANSION:", card.get("expansionId")
+    )
