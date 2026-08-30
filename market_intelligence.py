@@ -57,17 +57,79 @@ def calculate_value_score(
     if not trend_price or trend_price <= 0:
         return 50
 
-    reference = avg_30d or avg_7d
-
     score = 50
 
-    if reference and reference > 0:
-        discount_pct = (
-            reference / trend_price - 1
+    # Reward a genuine discount versus the longer-term reference,
+    # but cap the reward so a collapsing card cannot automatically
+    # receive 100/100 Value.
+    if avg_30d and avg_30d > 0:
+        discount_30d = (
+            avg_30d / trend_price - 1
         ) * 100
 
-        score += discount_pct * 1.8
+        if discount_30d > 0:
+            score += min(
+                discount_30d * 0.8,
+                25
+            )
 
+        elif discount_30d < 0:
+            score += max(
+                discount_30d * 0.5,
+                -15
+            )
+
+    # Compare current trend with the more recent 7-day market.
+    if avg_7d and avg_7d > 0:
+        change_vs_7d = (
+            trend_price / avg_7d - 1
+        ) * 100
+
+        # A moderate discount can be attractive.
+        if -10 <= change_vs_7d < 0:
+            score += 8
+
+        # A large recent fall is a falling-knife warning.
+        elif change_vs_7d < -10:
+            score -= min(
+                abs(change_vs_7d) * 0.8,
+                30
+            )
+
+        # Strong short-term price expansion makes the card less
+        # attractive from a value-entry perspective.
+        elif change_vs_7d > 15:
+            score -= min(
+                change_vs_7d * 0.4,
+                15
+            )
+
+    # Detect whether the recent 7-day market itself is deteriorating
+    # versus the 30-day market.
+    if (
+        avg_7d
+        and avg_30d
+        and avg_7d > 0
+        and avg_30d > 0
+    ):
+        seven_vs_thirty = (
+            avg_7d / avg_30d - 1
+        ) * 100
+
+        if seven_vs_thirty < -10:
+            score -= min(
+                abs(seven_vs_thirty) * 0.6,
+                20
+            )
+
+        elif seven_vs_thirty > 5:
+            score += min(
+                seven_vs_thirty * 0.3,
+                8
+            )
+
+    # A very large gap between low listing price and trend can indicate
+    # unstable pricing or weak market depth. Do not reward it as value.
     if (
         low_price
         and low_price > 0
@@ -77,16 +139,16 @@ def calculate_value_score(
             trend_price - low_price
         ) / trend_price * 100
 
-        score += min(
-            spread_pct * 0.4,
-            10
-        )
+        if spread_pct > 20:
+            score -= min(
+                (spread_pct - 20) * 0.25,
+                10
+            )
 
     return round(
         clamp(score),
         1
     )
-
 
 def calculate_liquidity_score(
     trend_price=None,
