@@ -260,9 +260,9 @@ elif page == "Card Analyzer":
                 f"{intelligence['reprint_risk_score']:.0f}/100"
             )
 
-                st.markdown("### Investment thesis")
-                for item in thesis(row,s):
-                    st.markdown(f"- {item}")
+            st.markdown("### Investment thesis")
+            for item in thesis(row,s):
+                st.markdown(f"- {item}")
 
             st.markdown("## Proprietary price history")
             hist=load_price_history(row["id"])
