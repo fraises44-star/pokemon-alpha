@@ -214,6 +214,51 @@ elif page == "Card Analyzer":
                 m2.metric("1d avg", f"€{row['avg1']:.2f}" if pd.notna(row.get("avg1")) else "—")
                 m3.metric("7d avg", f"€{row['avg7']:.2f}" if pd.notna(row.get("avg7")) else "—")
                 m4.metric("30d avg", f"€{row['avg30']:.2f}" if pd.notna(row.get("avg30")) else "—")
+                            st.markdown("### Investment Intelligence")
+
+            i1, i2, i3, i4 = st.columns(4)
+
+            i1.metric(
+                "Opportunity",
+                f"{intelligence['opportunity_score']:.0f}/100"
+            )
+
+            i2.metric(
+                "Momentum",
+                f"{intelligence['momentum_score']:.0f}/100"
+            )
+
+            i3.metric(
+                "Value",
+                f"{intelligence['value_score']:.0f}/100"
+            )
+
+            i4.metric(
+                "Liquidity",
+                f"{intelligence['liquidity_score']:.0f}/100"
+            )
+
+            i5, i6, i7 = st.columns(3)
+
+            i5.metric(
+                "Stability",
+                f"{intelligence['volatility_score']:.0f}/100"
+            )
+
+            i6.metric(
+                "Graded premium",
+                f"{intelligence['graded_premium_score']:.0f}/100"
+            )
+
+            i7.metric(
+                "Population",
+                f"{intelligence['population_score']:.0f}/100"
+            )
+
+            st.caption(
+                f"Reprint-risk quality: "
+                f"{intelligence['reprint_risk_score']:.0f}/100"
+            )
 
                 st.markdown("### Investment thesis")
                 for item in thesis(row,s):
