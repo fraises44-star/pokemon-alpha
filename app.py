@@ -210,10 +210,10 @@ elif page == "Card Analyzer":
                 score_box(s["pii"],signal(s["pii"]))
 
                 m1,m2,m3,m4=st.columns(4)
-                m1.metric("Trend",f"€{row['trend']:.2f}" if row.get("trend") is not None else "—")
-                m2.metric("1d avg",f"€{row['avg1']:.2f}" if row.get("avg1") is not None else "—")
-                m3.metric("7d avg",f"€{row['avg7']:.2f}" if row.get("avg7") is not None else "—")
-                m4.metric("30d avg",f"€{row['avg30']:.2f}" if row.get("avg30") is not None else "—")
+                m1.metric("Trend", f"€{row['trend']:.2f}" if pd.notna(row.get("trend")) else "—")
+                m2.metric("1d avg", f"€{row['avg1']:.2f}" if pd.notna(row.get("avg1")) else "—")
+                m3.metric("7d avg", f"€{row['avg7']:.2f}" if pd.notna(row.get("avg7")) else "—")
+                m4.metric("30d avg", f"€{row['avg30']:.2f}" if pd.notna(row.get("avg30")) else "—")
 
                 st.markdown("### Investment thesis")
                 for item in thesis(row,s):
