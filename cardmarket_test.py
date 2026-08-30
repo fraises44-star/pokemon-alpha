@@ -90,16 +90,42 @@ for card in cards:
         ):
             verified.append(candidate)
 
-    print("VERIFIED MATCHES:", len(verified))
+        print("VERIFIED MATCHES:", len(verified))
 
-    for candidate in verified:
+    if len(verified) == 1:
+        candidate = verified[0]
+
+        cardmarket_id = str(candidate.get("id"))
+
         print(
             "VERIFIED:",
-            candidate.get("id"),
+            cardmarket_id,
             "|",
             candidate.get("name"),
             "|",
             candidate.get("code"),
             "|",
             candidate.get("expansion"),
+        )
+
+        supabase.table("cards").update({
+            "cardmarket_id": cardmarket_id
+        }).eq(
+            "id",
+            card_id
+        ).execute()
+
+        print(
+            "SAVED:",
+            card_id,
+            "->",
+            cardmarket_id,
+        )
+
+    else:
+        print(
+            "SKIPPED:",
+            card_id,
+            "because verified match count is",
+            len(verified),
         )
