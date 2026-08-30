@@ -71,10 +71,30 @@ for card in cards:
     payload = response.json()
     candidates = payload.get("results") or []
 
-    print("CANDIDATES:", len(candidates))
+       print("CANDIDATES:", len(candidates))
 
-    for candidate in candidates[:5]:
+    verified = []
+
+    for candidate in candidates:
+        candidate_name = (
+            candidate.get("name") or ""
+        ).lower()
+
+        candidate_set = (
+            candidate.get("expansion") or ""
+        ).lower()
+
+        if (
+            name.lower() in candidate_name
+            and set_name.lower() == candidate_set
+        ):
+            verified.append(candidate)
+
+    print("VERIFIED MATCHES:", len(verified))
+
+    for candidate in verified:
         print(
+            "VERIFIED:",
             candidate.get("id"),
             "|",
             candidate.get("name"),
