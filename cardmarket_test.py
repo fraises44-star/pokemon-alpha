@@ -3,14 +3,15 @@ import requests
 
 API_KEY = os.environ["CARDMARKETAPI_KEY"]
 
-url = "https://api.cardmarketapi.com/v1/search"
+url = "https://cardmarketapi.com/api/v1/search"
 
 headers = {
-    "Authorization": f"Bearer {API_KEY}",
+    "X-API-Key": API_KEY,
 }
 
 params = {
-    "query": "SM158",
+    "q": "SM158",
+    "game": "pokemon",
 }
 
 response = requests.get(
