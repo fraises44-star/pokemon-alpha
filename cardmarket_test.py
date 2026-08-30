@@ -1,57 +1,85 @@
 import os
+import re
 import requests
 from supabase import create_client
 
 SUPABASE_URL = os.environ["SUPABASE_URL"]
 SUPABASE_ANON_KEY = os.environ["SUPABASE_ANON_KEY"]
-API_KEY = os.environ["TCG_CARDMARKET_API_KEY"]
+MAPPING_API_KEY = os.environ["CARDMARKETAPI_KEY"]
 
 supabase = create_client(
     SUPABASE_URL,
     SUPABASE_ANON_KEY,
 )
 
-card_id = "smp-SM158"
-
 result = (
     supabase.table("cards")
     .select("id,name,set_name,cardmarket_id")
-    .eq("id", card_id)
-    .single()
+    .is_("cardmarket_id", "null")
+    .limit(3)
     .execute()
 )
 
-card = result.data
+cards = result.data or []
 
-print("DATABASE CARD:", card)
+print("UNMAPPED CARDS:", len(cards))
 
-cardmarket_id = card.get("cardmarket_id")
+for card in cards:
+    card_id = card.get("id") or ""
+    name = card.get("name") or ""
+    set_name = card.get("set_name") or ""
 
-if not cardmarket_id:
-    raise RuntimeError("Card has no Cardmarket ID")
+    collector_part = card_id.split("-")[-1]
 
-url = (
-    "https://tcg-api-production-5148.up.railway.app"
-    f"/cards/pokemon/{cardmarket_id}"
-)
+    match = re.match(
+        r"([A-Za-z]+)(\d+)$",
+        collector_part,
+    )
 
-response = requests.get(
-    url,
-    headers={"X-API-Key": API_KEY},
-    timeout=20,
-)
+    if match:
+        search_code = (
+            f"{match.group(1)} "
+            f"{match.group(2)}"
+        )
+    else:
+        search_code = collector_part
 
-print("STATUS:", response.status_code)
+    print("-----")
+    print("DATABASE ID:", card_id)
+    print("NAME:", name)
+    print("SET:", set_name)
+    print("SEARCH CODE:", search_code)
 
-response.raise_for_status()
+    response = requests.get(
+        "https://cardmarketapi.com/api/v1/search",
+        headers={
+            "X-API-Key": MAPPING_API_KEY,
+        },
+        params={
+            "q": search_code,
+            "game": "pokemon",
+        },
+        timeout=20,
+    )
 
-market_card = response.json()
-price = market_card.get("price") or {}
+    print("STATUS:", response.status_code)
 
-print("CARDMARKET ID:", cardmarket_id)
-print("NAME:", market_card.get("name"))
-print("TREND:", price.get("trend"))
-print("LOW:", price.get("low"))
-print("AVG1:", price.get("avg1"))
-print("AVG7:", price.get("avg7"))
-print("AVG30:", price.get("avg30"))
+    if response.status_code != 200:
+        print("ERROR:", response.text)
+        continue
+
+    payload = response.json()
+    candidates = payload.get("results") or []
+
+    print("CANDIDATES:", len(candidates))
+
+    for candidate in candidates[:5]:
+        print(
+            candidate.get("id"),
+            "|",
+            candidate.get("name"),
+            "|",
+            candidate.get("code"),
+            "|",
+            candidate.get("expansion"),
+        )
