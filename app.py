@@ -216,7 +216,7 @@ elif page == "Card Analyzer":
                 m4.metric("30d avg", f"€{row['avg30']:.2f}" if pd.notna(row.get("avg30")) else "—")
             st.markdown("### Investment Intelligence")
 
-                       i1, i2, i3, i4, i5 = st.columns(5)
+            i1, i2, i3, i4, i5 = st.columns(5)
 
             i1.metric(
                 "Opportunity",
