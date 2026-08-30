@@ -218,8 +218,135 @@ elif page == "Card Analyzer":
                 chart.columns=["Trend","7d average","30d average"]
                 st.line_chart(chart)
 
-            st.markdown("## Graded market")
-            st.info("PSA, BGS/Beckett, CGC, TAG, SGC and ACE sold comps will plug in here once we select a feed that permits commercial use.")
+           st.markdown("## Graded market")
+
+graded_sales = load_graded_sales(
+    row["id"],
+    limit=200
+)
+
+if not graded_sales:
+
+    st.caption(
+        "No graded sales are stored for this card yet."
+    )
+
+    st.info(
+        "The system is ready for PSA, BGS/Beckett, CGC, TAG, SGC and ACE data. "
+        "Once we connect a commercial graded-data feed, sold comps will appear here automatically."
+    )
+
+else:
+
+    graded_df = pd.DataFrame(
+        graded_sales
+    )
+
+    graded_df["sold_price_eur"] = pd.to_numeric(
+        graded_df["sold_price_eur"],
+        errors="coerce"
+    )
+
+    graded_df["sold_at"] = pd.to_datetime(
+        graded_df["sold_at"],
+        errors="coerce"
+    )
+
+    latest_sales = (
+        graded_df
+        .sort_values(
+            "sold_at",
+            ascending=False
+        )
+        .groupby(
+            ["grader", "grade"],
+            as_index=False
+        )
+        .first()
+    )
+
+    st.markdown(
+        "### Latest graded sales"
+    )
+
+    st.dataframe(
+        latest_sales[
+            [
+                "grader",
+                "grade",
+                "sold_price_eur",
+                "sold_at",
+                "marketplace",
+                "source"
+            ]
+        ],
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "grader": "Grader",
+            "grade": "Grade",
+            "sold_price_eur": st.column_config.NumberColumn(
+                "Last sold",
+                format="€%.2f"
+            ),
+            "sold_at": "Sold date",
+            "marketplace": "Marketplace",
+            "source": "Source"
+        }
+    )
+
+    st.markdown(
+        "### Graded market summary"
+    )
+
+    summary = (
+        graded_df
+        .groupby(
+            ["grader", "grade"]
+        )
+        .agg(
+            sales_count=(
+                "sold_price_eur",
+                "count"
+            ),
+            average_price_eur=(
+                "sold_price_eur",
+                "mean"
+            ),
+            lowest_sale_eur=(
+                "sold_price_eur",
+                "min"
+            ),
+            highest_sale_eur=(
+                "sold_price_eur",
+                "max"
+            )
+        )
+        .reset_index()
+    )
+
+    st.dataframe(
+        summary,
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "grader": "Grader",
+            "grade": "Grade",
+            "sales_count": "Sales",
+            "average_price_eur": st.column_config.NumberColumn(
+                "Average",
+                format="€%.2f"
+            ),
+            "lowest_sale_eur": st.column_config.NumberColumn(
+                "Lowest",
+                format="€%.2f"
+            ),
+            "highest_sale_eur": st.column_config.NumberColumn(
+                "Highest",
+                format="€%.2f"
+            )
+        }
+    )
 
             st.markdown("## Population")
             pop=load_population(row["id"])
