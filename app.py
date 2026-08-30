@@ -185,16 +185,17 @@ elif page == "Card Analyzer":
             )
             row=df.loc[idx].to_dict()
             s=score(row)
-                    price_history = load_price_history(row["id"])
-        graded_sales = load_graded_sales(row["id"], limit=200)
-        population_history = load_population(row["id"])
-
-        intelligence = build_market_signal(
-            row,
-            price_history=price_history,
-            graded_sales=graded_sales,
-            population_history=population_history,
-        )
+            price_history = load_price_history(row["id"])
+            graded_sales = load_graded_sales(row["id"], limit=200)
+            population_history = load_population(row["id"])
+            
+            intelligence = build_market_signal(
+                row,
+                price_history=price_history,
+                graded_sales=graded_sales,
+                population_history=population_history,
+            )
+                  
 
             left,right=st.columns([1,2.5])
             with left:
