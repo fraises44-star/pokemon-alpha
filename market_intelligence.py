@@ -543,7 +543,58 @@ def build_market_signal(
             reprint_risk_score,
         )
     )
+    confidence_points = 0
+    confidence_max = 0
 
+    core_price_fields = [
+        prices.get("trend"),
+        prices.get("avg7"),
+        prices.get("avg30"),
+    ]
+
+    for value in core_price_fields:
+        confidence_max += 10
+
+        if safe_float(value) is not None:
+            confidence_points += 10
+
+    history_count = len(price_history or [])
+
+    confidence_max += 25
+
+    if history_count >= 30:
+        confidence_points += 25
+
+    elif history_count >= 14:
+        confidence_points += 20
+
+    elif history_count >= 7:
+        confidence_points += 15
+
+    elif history_count >= 3:
+        confidence_points += 8
+
+    confidence_max += 15
+
+    if volatility_score is not None:
+        confidence_points += 15
+
+    confidence_max += 15
+
+    if graded_premium_score is not None:
+        confidence_points += 15
+
+    confidence_max += 15
+
+    if population_score is not None:
+        confidence_points += 15
+
+    data_confidence = round(
+        confidence_points
+        / confidence_max
+        * 100,
+        1
+    )
     return {
         "card_id": card.get("id"),
         "momentum_score": momentum_score,
