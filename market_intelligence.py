@@ -152,29 +152,25 @@ def calculate_volatility_score(
     for item in price_history or []:
         if isinstance(item, dict):
             price = safe_float(
-                item.get(
-                    "trend_price_eur"
-                )
+                item.get("trend_price_eur")
                 or item.get("trend")
             )
         else:
             price = safe_float(item)
 
-        if (
-            price is not None
-            and price > 0
-        ):
+        if price is not None and price > 0:
             prices.append(price)
 
-    if len(prices) < 3:
-        return 50
+    observation_count = len(prices)
 
-    average_price = mean(
-        prices
-    )
+    # Not enough proprietary history to judge stability yet.
+    if observation_count < 3:
+        return None
+
+    average_price = mean(prices)
 
     if average_price <= 0:
-        return 50
+        return None
 
     volatility = (
         pstdev(prices)
@@ -183,6 +179,16 @@ def calculate_volatility_score(
     )
 
     score = 100 - volatility * 3
+
+    # Confidence penalty while our own history is still young.
+    if observation_count < 7:
+        score *= 0.70
+
+    elif observation_count < 14:
+        score *= 0.85
+
+    elif observation_count < 30:
+        score *= 0.95
 
     return round(
         clamp(score),
