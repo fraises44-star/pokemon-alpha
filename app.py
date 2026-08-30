@@ -216,45 +216,49 @@ elif page == "Card Analyzer":
                 m4.metric("30d avg", f"€{row['avg30']:.2f}" if pd.notna(row.get("avg30")) else "—")
             st.markdown("### Investment Intelligence")
 
-            i1, i2, i3, i4 = st.columns(4)
+            i1, i2, i3, i4, i5 = st.columns(5)
 
             i1.metric(
                 "Opportunity",
                 f"{intelligence['opportunity_score']:.0f}/100"
             )
-
             i2.metric(
+                "Confidence",
+                f"{intelligence['data_confidence']:.0f}/100"
+            )
+
+           i3.metric(
                 "Momentum",
                 f"{intelligence['momentum_score']:.0f}/100"
             )
 
-            i3.metric(
+            i4.metric(
                 "Value",
                 f"{intelligence['value_score']:.0f}/100"
             )
 
-            i4.metric(
+            i5.metric(
                 "Liquidity",
                 f"{intelligence['liquidity_score']:.0f}/100"
             )
 
-            i5, i6, i7 = st.columns(3)
+            j1, j2, j3 = st.columns(3)
 
-            i5.metric(
+            j1.metric(
                 "Stability",
                 "No data"
                 if intelligence["volatility_score"] is None
                 else f"{intelligence['volatility_score']:.0f}/100"
             )
 
-            i6.metric(
+            j2.metric(
                 "Graded premium",
                 "No data"
                 if intelligence["graded_premium_score"] is None
                 else f"{intelligence['graded_premium_score']:.0f}/100"
             )
 
-            i7.metric(
+            j3.metric(
                 "Population",
                 "No data"
                 if intelligence["population_score"] is None
