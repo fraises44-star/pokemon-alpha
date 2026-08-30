@@ -246,13 +246,22 @@ elif page == "Card Analyzer":
             )
 
             i6.metric(
-                "Graded premium",
-                f"{intelligence['graded_premium_score']:.0f}/100"
-            )
+    "Graded premium",
+    (
+        f"{intelligence['graded_premium_score']:.0f}/100"
+        if intelligence["graded_premium_score"] is not None
+        else "No data"
+    )
+)
 
-            i7.metric(
-                "Population",
-                f"{intelligence['population_score']:.0f}/100"
+          i7.metric(
+    "Population",
+    (
+        f"{intelligence['population_score']:.0f}/100"
+        if intelligence["population_score"] is not None
+        else "No data"
+    )
+)
             )
 
             st.caption(
