@@ -242,7 +242,9 @@ elif page == "Card Analyzer":
 
             i5.metric(
                 "Stability",
-                f"{intelligence['volatility_score']:.0f}/100"
+                "No data"
+                if intelligence["volatility_score"] is None
+                else f"{intelligence['volatility_score']:.0f}/100"
             )
 
             i6.metric(
