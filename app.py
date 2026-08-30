@@ -13,6 +13,7 @@ from supabase_db import (
 )
 from eu_market import fetch_eu_sample
 from scoring import score, signal, thesis
+from market_intelligence import build_market_signal
 from ui import css, card_metric, score_box
 
 st.set_page_config(
