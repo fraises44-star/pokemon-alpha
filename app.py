@@ -349,11 +349,118 @@ else:
     )
 
             st.markdown("## Population")
-            pop=load_population(row["id"])
-            if not pop:
-                st.caption("No population snapshots loaded yet.")
-            else:
-                st.dataframe(pd.DataFrame(pop),use_container_width=True,hide_index=True)
+
+pop = load_population(
+    row["id"]
+)
+
+if not pop:
+
+    st.caption(
+        "No population snapshots are stored for this card yet."
+    )
+
+    st.info(
+        "This section is ready for PSA, BGS/Beckett, CGC, TAG, SGC and ACE population data. "
+        "Once a population feed is connected, Pokémon Alpha will track both current population and population growth over time."
+    )
+
+else:
+
+    pop_df = pd.DataFrame(
+        pop
+    )
+
+    pop_df["population"] = pd.to_numeric(
+        pop_df["population"],
+        errors="coerce"
+    )
+
+    pop_df["recorded_at"] = pd.to_datetime(
+        pop_df["recorded_at"],
+        errors="coerce"
+    )
+
+    latest_population = (
+        pop_df
+        .sort_values(
+            "recorded_at",
+            ascending=False
+        )
+        .groupby(
+            ["grader", "grade"],
+            as_index=False
+        )
+        .first()
+    )
+
+    st.markdown(
+        "### Current graded population"
+    )
+
+    st.dataframe(
+        latest_population[
+            [
+                "grader",
+                "grade",
+                "population",
+                "recorded_at",
+                "source"
+            ]
+        ],
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "grader": "Grader",
+            "grade": "Grade",
+            "population": st.column_config.NumberColumn(
+                "Population",
+                format="%d"
+            ),
+            "recorded_at": "Updated",
+            "source": "Source"
+        }
+    )
+
+    st.markdown(
+        "### Population history"
+    )
+
+    for grader in pop_df["grader"].dropna().unique():
+
+        grader_df = pop_df[
+            pop_df["grader"] == grader
+        ].copy()
+
+        for grade in grader_df["grade"].dropna().unique():
+
+            grade_df = grader_df[
+                grader_df["grade"] == grade
+            ].sort_values(
+                "recorded_at"
+            )
+
+            if len(grade_df) >= 2:
+
+                st.caption(
+                    f"{grader} {grade}"
+                )
+
+                chart_df = (
+                    grade_df[
+                        [
+                            "recorded_at",
+                            "population"
+                        ]
+                    ]
+                    .set_index(
+                        "recorded_at"
+                    )
+                )
+
+                st.line_chart(
+                    chart_df
+                )
 
 elif page == "Market Sync":
     st.title("EU Market Sync")
