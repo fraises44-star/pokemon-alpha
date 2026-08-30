@@ -9,6 +9,7 @@ params = {
     "game": "pokemon",
     "name": "Charizard",
     "limit": 100,
+    "page": 2,
 }
 
 headers = {
