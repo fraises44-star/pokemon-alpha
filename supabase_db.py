@@ -70,30 +70,24 @@ def load_market(limit=1000):
         return []
 
     prices = (
-        sb.table("price_history")
+        sb.table("latest_card_prices")
         .select("*")
-        .order("recorded_at", desc=True)
-        .limit(5000)
+        .limit(limit)
         .execute()
         .data
         or []
     )
 
-    latest = {}
-
-    for p in prices:
-        cid = p.get("card_id")
-
-        if cid and cid not in latest:
-            latest[cid] = p
+    latest = {
+        p["card_id"]: p
+        for p in prices
+        if p.get("card_id")
+    }
 
     out = []
 
     for c in cards:
-        p = latest.get(
-            c["id"],
-            {}
-        )
+        p = latest.get(c["id"], {})
 
         out.append({
             **c,
