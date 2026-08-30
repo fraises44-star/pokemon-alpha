@@ -415,10 +415,14 @@ def build_market_signal(
     graded_sales=None,
     population_history=None,
 ):
-    prices = (
-        card.get("prices")
-        or {}
-    )
+    prices = card.get("prices") or {
+        "trend": card.get("trend"),
+        "low": card.get("low"),
+        "avg": card.get("avg"),
+        "avg1": card.get("avg1"),
+        "avg7": card.get("avg7"),
+        "avg30": card.get("avg30"),
+    }
 
     momentum_score = (
         calculate_momentum_score(
