@@ -245,7 +245,7 @@ elif page == "Card Analyzer":
                 f"{intelligence['volatility_score']:.0f}/100"
             )
 
-                        i6.metric(
+            i6.metric(
                 "Graded premium",
                 "No data"
                 if intelligence["graded_premium_score"] is None
