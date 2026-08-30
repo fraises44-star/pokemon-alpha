@@ -53,23 +53,38 @@ def insert_price_snapshots(cards):
 
 def load_market(limit=1000):
     sb = get_supabase()
+
     if sb is None:
         return []
-    cards = (sb.table("cards").select("*").limit(limit).execute().data or [])
+
+    cards = (
+        sb.table("cards")
+        .select("*")
+        .limit(limit)
+        .execute()
+        .data
+        or []
+    )
+
     if not cards:
         return []
-    prices = (
-        sb.table("price_history").select("*")
-        .order("recorded_at", desc=True).limit(limit).execute().data or []
-    )
-    latest = {}
-    for p in prices:
-        cid = p.get("card_id")
-        if cid and cid not in latest:
-            latest[cid] = p
+
     out = []
+
     for c in cards:
-        p = latest.get(c["id"], {})
+        price_result = (
+            sb.table("price_history")
+            .select("*")
+            .eq("card_id", c["id"])
+            .order("recorded_at", desc=True)
+            .limit(1)
+            .execute()
+        )
+
+        prices = price_result.data or []
+
+        p = prices[0] if prices else {}
+
         out.append({
             **c,
             "trend": p.get("trend_price_eur"),
@@ -80,6 +95,7 @@ def load_market(limit=1000):
             "avg30": p.get("avg_30d_eur"),
             "recorded_at": p.get("recorded_at"),
         })
+
     return out
 
 def load_price_history(card_id, limit=180):
