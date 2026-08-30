@@ -1,23 +1,17 @@
 import os
 import requests
 
-API_KEY = os.environ["CARDMARKETAPI_KEY"]
+API_KEY = os.environ["TCG_CARDMARKET_API_KEY"]
 
-url = "https://cardmarketapi.com/api/v1/search"
+url = "https://tcg-api-production-5148.up.railway.app/cards/pokemon/368851"
 
 headers = {
     "X-API-Key": API_KEY,
 }
 
-params = {
-    "q": "SM 158",
-    "game": "pokemon",
-}
-
 response = requests.get(
     url,
     headers=headers,
-    params=params,
     timeout=20,
 )
 
