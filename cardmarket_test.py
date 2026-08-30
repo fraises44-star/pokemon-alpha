@@ -28,12 +28,24 @@ data = response.json()
 
 cards = data.get("data", [])
 
-print("RESULTS:", len(cards))
+target_ids = {
+    "558291",
+    "412909",
+    "851285",
+    "886369",
+}
 
-for number, card in enumerate(cards, start=1):
-    print(
-        number,
-        "| NAME:", card.get("name"),
-        "| CARDMARKET ID:", card.get("externalId"),
-        "| EXPANSION:", card.get("expansionId")
-    )
+for card in cards:
+    if str(card.get("externalId")) in target_ids:
+        price = card.get("price") or {}
+
+        print("-----")
+        print("NAME:", card.get("name"))
+        print("CARDMARKET ID:", card.get("externalId"))
+        print("EXPANSION:", card.get("expansionId"))
+        print("SELL:", price.get("sell"))
+        print("LOW:", price.get("low"))
+        print("TREND:", price.get("trend"))
+        print("AVG1:", price.get("avg1"))
+        print("AVG7:", price.get("avg7"))
+        print("AVG30:", price.get("avg30"))
