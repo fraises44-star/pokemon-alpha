@@ -71,7 +71,7 @@ for card in cards:
     payload = response.json()
     candidates = payload.get("results") or []
 
-       print("CANDIDATES:", len(candidates))
+    print("CANDIDATES:", len(candidates))
 
     verified = []
 
