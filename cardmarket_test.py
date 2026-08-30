@@ -90,7 +90,7 @@ for card in cards:
         ):
             verified.append(candidate)
 
-        print("VERIFIED MATCHES:", len(verified))
+    print("VERIFIED MATCHES:", len(verified))
 
     if len(verified) == 1:
         candidate = verified[0]
