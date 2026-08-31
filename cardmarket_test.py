@@ -67,8 +67,8 @@ for card in cards:
         },
         timeout=20,
     )
-
-       print("STATUS:", response.status_code)
+ 
+    print("STATUS:", response.status_code)
 
     if response.status_code == 429:
         print("DAILY API LIMIT REACHED — STOPPING")
