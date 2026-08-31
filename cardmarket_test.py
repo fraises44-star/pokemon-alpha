@@ -68,15 +68,15 @@ for card in cards:
         timeout=20,
     )
 
-    print("STATUS:", response.status_code)
+       print("STATUS:", response.status_code)
 
-   if response.status_code == 429:
-    print("DAILY API LIMIT REACHED — STOPPING")
-    break
+    if response.status_code == 429:
+        print("DAILY API LIMIT REACHED — STOPPING")
+        break
 
-   if response.status_code != 200:
-    print("ERROR:", response.text)
-    continue
+    if response.status_code != 200:
+        print("ERROR:", response.text)
+        continue
 
     payload = response.json()
     candidates = payload.get("results") or []
@@ -84,7 +84,6 @@ for card in cards:
     print("CANDIDATES:", len(candidates))
 
     verified = []
-
     for candidate in candidates:
         candidate_name = (
             candidate.get("name") or ""
