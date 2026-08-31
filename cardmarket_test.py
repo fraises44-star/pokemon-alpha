@@ -41,14 +41,14 @@ for card in cards:
             f"{match.group(1)} "
             f"{match.group(2)}"
         )
-   else:
-    search_code = collector_part
+    else:
+        search_code = collector_part
 
-if len(search_code.strip()) < 2:
-    print("-----")
-    print("SKIPPED:", card_id)
-    print("REASON: Search code is too short")
-    continue
+    if len(search_code.strip()) < 2:
+        print("-----")
+        print("SKIPPED:", card_id)
+        print("REASON: Search code is too short")
+        continue
 
     print("-----")
     print("DATABASE ID:", card_id)
