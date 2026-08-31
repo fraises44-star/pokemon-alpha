@@ -7,7 +7,6 @@ API_KEY = os.environ["TCG_CARDMARKET_API_KEY"]
 
 
 def fetch_cardmarket_prices(cardmarket_ids):
-
     if not cardmarket_ids:
         return []
 
@@ -32,7 +31,7 @@ def fetch_cardmarket_prices(cardmarket_ids):
         response.status_code,
     )
 
-      if not response.ok:
+    if not response.ok:
         raise RuntimeError(
             "Cardmarket pricing request failed: "
             + response.text
