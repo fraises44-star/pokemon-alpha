@@ -32,10 +32,10 @@ def fetch_cardmarket_prices(cardmarket_ids):
         response.status_code,
     )
 
-    if not response.ok:
-    raise RuntimeError(
-        "Cardmarket pricing request failed: "
-        + response.text
-    )
+      if not response.ok:
+        raise RuntimeError(
+            "Cardmarket pricing request failed: "
+            + response.text
+        )
 
     return response.json()
