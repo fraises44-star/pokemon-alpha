@@ -30,8 +30,11 @@ cardmarket_ids = [
     for card in cards
 ]
 
+print("REQUESTED CARDMARKET IDS:")
+print(cardmarket_ids)
 prices = fetch_cardmarket_prices(
     cardmarket_ids
+    
 )
 
 print("PRICE RESULTS:")
