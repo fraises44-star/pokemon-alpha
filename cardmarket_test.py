@@ -16,7 +16,7 @@ result = (
     supabase.table("cards")
     .select("id,name,set_name,cardmarket_id")
     .is_("cardmarket_id", "null")
-    .limit(3)
+    .limit(10)
     .execute()
 )
 
